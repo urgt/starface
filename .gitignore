@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+
+# ml models cache
+apps/ml/ml-models/
+~/.insightface/
+
+# data / runtime
+data/
+*.log
+
+# env
+.env
+.env.local
+.env.*.local
+
+# editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# drizzle
+apps/web/drizzle/meta/
