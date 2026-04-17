@@ -2,11 +2,12 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { eq, sql } from "drizzle-orm";
 
-import { ResultShareClient } from "./ResultShareClient";
 import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
+import { brandThemeFromRow, DEFAULT_BRAND_THEME } from "@/lib/brand-theme";
+import { ResultCard, type ResultCardData } from "@/components/result/ResultCard";
 
 export const dynamic = "force-dynamic";
 
@@ -100,10 +101,12 @@ export async function generateMetadata({
   if (!result) return { title: "StarFace UZ" };
   const celebName = result.celebrity?.name ?? "?";
   const title = `${celebName} — ${result.similarity}% сходства · StarFace UZ`;
-  const imageUrl = `${appConfig.appUrl}/api/files/${result.user_photo_path}`;
+  // Server-rendered composite (selfie + celeb + %) — looks much better in
+  // Telegram/WhatsApp previews than just the raw selfie.
+  const imageUrl = `${appConfig.appUrl}/r/${resultId}/og-image`;
   return {
     title,
-    openGraph: { title, images: [imageUrl] },
+    openGraph: { title, images: [{ url: imageUrl, width: 1200, height: 630 }] },
     twitter: { card: "summary_large_image", title, images: [imageUrl] },
   };
 }
@@ -130,101 +133,27 @@ export default async function ResultPage({
     );
   }
 
-  const brand = await loadBrand(result.brand_id ?? sp.brand);
-  const celebName =
-    locale === "ru"
-      ? result.celebrity?.nameRu ?? result.celebrity?.name ?? ""
-      : result.celebrity?.name ?? "";
-  const descUz = result.celebrity?.descriptionUz ?? null;
-  const descRu = result.celebrity?.descriptionRu ?? null;
-  const descEn = result.celebrity?.descriptionEn ?? null;
-  const description =
-    locale === "ru" ? descRu || descUz || descEn : descUz || descRu || descEn;
-
-  const cssVars = {
-    "--brand-primary": brand?.primaryColor ?? "#FF5E3A",
-    "--brand-accent": brand?.accentColor ?? "#111111",
-  } as React.CSSProperties;
+  const brandRow = await loadBrand(result.brand_id ?? sp.brand);
+  const brand = brandRow ? brandThemeFromRow(brandRow) : DEFAULT_BRAND_THEME;
 
   const shareUrl = `${appConfig.appUrl}/r/${result.id}${
-    brand ? `?brand=${encodeURIComponent(brand.id)}&lang=${locale}` : `?lang=${locale}`
+    brand.id !== "__default" ? `?brand=${encodeURIComponent(brand.id)}&lang=${locale}` : `?lang=${locale}`
   }`;
-  const shareText = `${celebName} — ${result.similarity}% ${dict.similarity} · StarFace UZ`;
 
-  const promoText =
-    brand &&
-    (locale === "ru" ? brand.promoTextRu ?? null : brand.promoTextUz ?? null);
+  const data: ResultCardData = {
+    resultId: result.id,
+    similarity: result.similarity,
+    userPhotoUrl: `/api/files/${result.user_photo_path}`,
+    celebrity: {
+      name: result.celebrity?.name ?? "?",
+      nameRu: result.celebrity?.nameRu ?? null,
+      descriptionUz: result.celebrity?.descriptionUz ?? null,
+      descriptionRu: result.celebrity?.descriptionRu ?? null,
+      descriptionEn: result.celebrity?.descriptionEn ?? null,
+      photoUrl: result.celebrity?.photoPath ? `/api/files/${result.celebrity.photoPath}` : null,
+    },
+    shareUrl,
+  };
 
-  return (
-    <div className="min-h-screen bg-neutral-950 px-4 py-8" style={cssVars}>
-      <div className="mx-auto max-w-md space-y-6">
-        {brand && (
-          <div className="flex items-center justify-center">
-            {brand.logoPath ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={`/api/files/${brand.logoPath}`}
-                alt={dict.brandLogoAlt}
-                className="h-14 max-w-[200px] object-contain"
-              />
-            ) : (
-              <p className="text-sm uppercase tracking-widest text-neutral-500">{brand.name}</p>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-white/10 bg-black">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/files/${result.user_photo_path}`}
-            alt="you"
-            className="aspect-square w-full object-contain scale-x-[-1]"
-          />
-          {result.celebrity?.photoPath && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={`/api/files/${result.celebrity.photoPath}`}
-              alt={celebName}
-              className="aspect-square w-full object-contain"
-            />
-          )}
-        </div>
-
-        <div className="space-y-2 text-center">
-          <p className="text-sm uppercase tracking-widest text-neutral-500">{celebName}</p>
-          <p className="text-6xl font-black text-[var(--brand-primary)]">
-            {result.similarity}%
-          </p>
-          <p className="text-neutral-400">{dict.similarity}</p>
-        </div>
-
-        {description && (
-          <p className="text-center text-lg leading-snug text-neutral-200">{description}</p>
-        )}
-
-        {brand?.promoCode && (
-          <div className="rounded-2xl border border-dashed border-[var(--brand-primary)]/70 bg-[var(--brand-primary)]/10 p-6 text-center">
-            <p className="text-xs uppercase tracking-widest text-neutral-400">{dict.promo}</p>
-            {promoText && <p className="mt-1 text-neutral-200">{promoText}</p>}
-            <p className="mt-3 text-3xl font-black tracking-widest text-[var(--brand-primary)]">
-              {brand.promoCode}
-            </p>
-          </div>
-        )}
-
-        <ResultShareClient
-          resultId={result.id}
-          brandId={brand?.id ?? null}
-          shareUrl={shareUrl}
-          shareText={shareText}
-          dict={{
-            share: dict.share,
-            telegram: dict.shareTelegram,
-            copy: dict.copyLink,
-            copied: dict.linkCopied,
-          }}
-        />
-      </div>
-    </div>
-  );
+  return <ResultCard data={data} brand={brand} locale={locale} />;
 }

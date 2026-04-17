@@ -47,6 +47,29 @@ class EmbedResult:
     bbox: list[float]
     det_score: float
     face_quality: str
+    sex: str | None = None
+    age: int | None = None
+
+
+@dataclass
+class EmbedBatchResult:
+    """Averaged template embedding built from a burst of selfies.
+
+    `embedding` is the L2-normalised mean of the `accepted` frames' embeddings
+    (1 ≤ accepted ≤ len(images)). `best_frame_index` points at the highest-quality
+    frame (max det_score) and its metadata is echoed at the top level so the
+    caller can persist just that frame.
+    """
+
+    embedding: list[float]
+    best_frame_index: int
+    accepted: int
+    rejected: list[dict]
+    bbox: list[float]
+    det_score: float
+    face_quality: str
+    sex: str | None = None
+    age: int | None = None
 
 
 class NoFaceError(ValueError):
@@ -117,9 +140,91 @@ def embed_image(image_base64: str, allow_multiple: bool = False) -> EmbedResult:
     if face.det_score < 0.75 or min(face_w, face_h) < 120:
         quality = "medium"
 
+    sex = getattr(face, "sex", None)
+    age = getattr(face, "age", None)
+    sex_value = sex if sex in ("M", "F") else None
+    age_value: int | None
+    try:
+        age_value = int(age) if age is not None else None
+    except (TypeError, ValueError):
+        age_value = None
+
     return EmbedResult(
         embedding=emb.astype(np.float32).tolist(),
         bbox=[float(x1), float(y1), float(x2), float(y2)],
         det_score=float(face.det_score),
         face_quality=quality,
+        sex=sex_value,
+        age=age_value,
+    )
+
+
+def embed_images_batch(
+    images_base64: list[str], allow_multiple: bool = False
+) -> EmbedBatchResult:
+    """Process a burst of selfies → averaged template embedding.
+
+    Each frame is passed through `embed_image`. Frames that fail the per-frame
+    quality gate (`NoFaceError`, `MultipleFacesError`, `LowQualityError`) are
+    collected in `rejected` and skipped. Accepted frames' unit embeddings are
+    averaged and re-normalised. The frame with the highest `det_score` is
+    chosen as the "best" frame and its attributes (bbox, quality, sex, age)
+    are echoed on the batch result — callers persist only that frame.
+
+    Raises NoFaceError (code="all_frames_rejected") if no frame passes.
+    """
+    if not images_base64:
+        raise NoFaceError("no_images")
+
+    accepted: list[tuple[int, EmbedResult]] = []
+    rejected: list[dict] = []
+    for idx, img_b64 in enumerate(images_base64):
+        try:
+            res = embed_image(img_b64, allow_multiple=allow_multiple)
+        except NoFaceError as e:
+            rejected.append({"index": idx, "code": "no_face", "message": str(e)})
+            continue
+        except MultipleFacesError as e:
+            rejected.append({"index": idx, "code": "multiple_faces", "message": str(e)})
+            continue
+        except LowQualityError as e:
+            rejected.append({"index": idx, "code": "low_quality", "message": str(e)})
+            continue
+        accepted.append((idx, res))
+
+    if not accepted:
+        # Expose the most informative rejection so the UI can hint the user.
+        raise NoFaceError("all_frames_rejected")
+
+    vectors = np.asarray([r.embedding for _, r in accepted], dtype=np.float32)
+    mean = vectors.mean(axis=0)
+    norm = float(np.linalg.norm(mean))
+    if norm < 1e-8:
+        # Extremely unlikely (would mean the accepted vectors cancel out).
+        raise LowQualityError("embedding_collapse")
+    template = (mean / norm).tolist()
+
+    best_idx_local = max(range(len(accepted)), key=lambda i: accepted[i][1].det_score)
+    best_frame_index, best = accepted[best_idx_local]
+
+    # Prefer non-null sex/age from the best frame; fall back to any accepted
+    # frame so downstream code still gets the attribute even if the sharpest
+    # frame happened to miss it.
+    sex = best.sex
+    age = best.age
+    if sex is None:
+        sex = next((r.sex for _, r in accepted if r.sex is not None), None)
+    if age is None:
+        age = next((r.age for _, r in accepted if r.age is not None), None)
+
+    return EmbedBatchResult(
+        embedding=template,
+        best_frame_index=best_frame_index,
+        accepted=len(accepted),
+        rejected=rejected,
+        bbox=best.bbox,
+        det_score=best.det_score,
+        face_quality=best.face_quality,
+        sex=sex,
+        age=age,
     )

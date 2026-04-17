@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#3a1c4e" />
+      <stop offset="100%" stop-color="#0a0a0a" />
+    </radialGradient>
+    <linearGradient id="face" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f4c9a4" />
+      <stop offset="100%" stop-color="#c48a66" />
+    </linearGradient>
+    <linearGradient id="hair" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a1810" />
+      <stop offset="100%" stop-color="#1a0f08" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#bg)" />
+  <!-- shoulders -->
+  <path d="M 100 560 Q 300 380 500 560 L 500 600 L 100 600 Z" fill="#1a1a2e" />
+  <!-- neck -->
+  <rect x="260" y="360" width="80" height="80" fill="url(#face)" />
+  <!-- face -->
+  <ellipse cx="300" cy="280" rx="120" ry="150" fill="url(#face)" />
+  <!-- hair -->
+  <path d="M 180 260 Q 200 140 300 120 Q 400 140 420 260 Q 420 200 400 190 Q 300 130 200 190 Q 180 220 180 260 Z" fill="url(#hair)" />
+  <!-- eyes -->
+  <ellipse cx="260" cy="280" rx="10" ry="5" fill="#2a1810" />
+  <ellipse cx="340" cy="280" rx="10" ry="5" fill="#2a1810" />
+  <!-- smile -->
+  <path d="M 260 340 Q 300 365 340 340" stroke="#8b4a3b" stroke-width="4" fill="none" stroke-linecap="round" />
+  <!-- peace sign -->
+  <g transform="translate(440, 400)" opacity="0.85">
+    <circle r="48" fill="#f4c9a4" />
+    <rect x="-10" y="-45" width="8" height="45" fill="#f4c9a4" rx="4" />
+    <rect x="2" y="-45" width="8" height="45" fill="#f4c9a4" rx="4" />
+  </g>
+</svg>

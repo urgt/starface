@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     const buffer = await readStoredFile(joined);
     const ext = joined.split(".").pop()?.toLowerCase() ?? "";
     const contentType = EXT_TO_MIME[ext] ?? "application/octet-stream";
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=86400",

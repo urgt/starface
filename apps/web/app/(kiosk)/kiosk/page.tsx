@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { KioskApp } from "@/components/kiosk/KioskApp";
 import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
+import { brandThemeFromRow } from "@/lib/brand-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -25,18 +26,7 @@ export default async function KioskPage({
 
   if (!brand || !brand.active) notFound();
 
-  return (
-    <KioskApp
-      brand={{
-        id: brand.id,
-        name: brand.name,
-        logoUrl: brand.logoPath ? `/api/files/${brand.logoPath}` : null,
-        primaryColor: brand.primaryColor ?? "#FF5E3A",
-        accentColor: brand.accentColor ?? "#111111",
-        idleTextUz: brand.idleTextUz ?? null,
-        idleTextRu: brand.idleTextRu ?? null,
-      }}
-      appUrl={appConfig.appUrl}
-    />
-  );
+  const theme = brandThemeFromRow(brand);
+
+  return <KioskApp brand={theme} appUrl={appConfig.appUrl} />;
 }

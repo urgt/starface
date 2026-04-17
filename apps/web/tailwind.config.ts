@@ -14,16 +14,61 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        sans: [
+          "var(--font-manrope)",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif",
+        ],
+        brand: [
+          "var(--brand-font, var(--font-manrope))",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       animation: {
         "pulse-slow": "pulse 2s ease-in-out infinite",
-        "scale-in": "scaleIn 300ms ease-out",
+        "scale-in": "scaleIn 500ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "mosaic-scroll": "mosaicScroll 60s linear infinite",
+        "glow-pulse": "glowPulse 2.4s ease-in-out infinite",
+        "float-in": "floatIn 700ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "shimmer": "shimmer 3s linear infinite",
+        "scan-sweep": "scanSweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        "flash": "flashFade 260ms ease-out both",
       },
       keyframes: {
         scaleIn: {
-          "0%": { transform: "scale(0.9)", opacity: "0" },
+          "0%": { transform: "scale(0.8)", opacity: "0" },
+          "60%": { transform: "scale(1.04)", opacity: "1" },
           "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        mosaicScroll: {
+          "0%": { transform: "translateY(0)" },
+          "100%": { transform: "translateY(-50%)" },
+        },
+        glowPulse: {
+          "0%, 100%": { filter: "drop-shadow(0 0 24px var(--brand-primary))" },
+          "50%": { filter: "drop-shadow(0 0 56px var(--brand-primary))" },
+        },
+        floatIn: {
+          "0%": { transform: "translateY(24px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
+        scanSweep: {
+          "0%": { transform: "translateY(-120%)" },
+          "100%": { transform: "translateY(420%)" },
+        },
+        flashFade: {
+          "0%": { opacity: "0.9" },
+          "100%": { opacity: "0" },
         },
       },
     },

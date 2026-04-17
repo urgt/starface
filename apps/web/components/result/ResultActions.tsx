@@ -10,7 +10,7 @@ type Props = {
   dict: { share: string; telegram: string; copy: string; copied: string };
 };
 
-export function ResultShareClient({ resultId, brandId, shareUrl, shareText, dict }: Props) {
+export function ResultActions({ resultId, brandId, shareUrl, shareText, dict }: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -36,20 +36,22 @@ export function ResultShareClient({ resultId, brandId, shareUrl, shareText, dict
 
   return (
     <div className="space-y-3">
-      <p className="text-center text-sm uppercase tracking-widest text-neutral-500">{dict.share}</p>
+      <p className="text-center text-[10px] uppercase tracking-[0.25em] text-white/50">
+        {dict.share}
+      </p>
       <div className="grid grid-cols-2 gap-3">
         <a
           href={telegramUrl}
           target="_blank"
           rel="noreferrer"
           onClick={handleTelegram}
-          className="rounded-xl bg-[var(--brand-primary)] py-3 text-center font-semibold text-white"
+          className="rounded-2xl border border-white/10 bg-white/5 py-3 text-center text-sm font-semibold text-white backdrop-blur transition hover:bg-white/10"
         >
           {dict.telegram}
         </a>
         <button
           onClick={handleCopy}
-          className="rounded-xl border border-white/15 py-3 font-semibold text-neutral-200"
+          className="rounded-2xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/10"
         >
           {copied ? dict.copied : dict.copy}
         </button>

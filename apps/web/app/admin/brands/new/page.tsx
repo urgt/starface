@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs";
 
 import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
+import { BrandFormFields } from "../BrandFormFields";
 
 export const dynamic = "force-dynamic";
 
@@ -26,17 +27,32 @@ async function createBrand(formData: FormData) {
     logoPath = `logos/${filename}`;
   }
 
+  const s = (key: string): string | null => {
+    const v = String(formData.get(key) ?? "").trim();
+    return v.length ? v : null;
+  };
+
   await db.insert(schema.brands).values({
     id,
     name,
     logoPath,
-    primaryColor: (String(formData.get("primaryColor") ?? "")) || "#FF5E3A",
-    accentColor: (String(formData.get("accentColor") ?? "")) || "#111111",
-    idleTextUz: (String(formData.get("idleTextUz") ?? "")) || null,
-    idleTextRu: (String(formData.get("idleTextRu") ?? "")) || null,
-    promoCode: (String(formData.get("promoCode") ?? "")) || null,
-    promoTextUz: (String(formData.get("promoTextUz") ?? "")) || null,
-    promoTextRu: (String(formData.get("promoTextRu") ?? "")) || null,
+    primaryColor: s("primaryColor") ?? "#FF5E3A",
+    accentColor: s("accentColor") ?? "#111111",
+    bgGradientFrom: s("bgGradientFrom") ?? "#1a0b2e",
+    bgGradientTo: s("bgGradientTo") ?? "#0a0a0a",
+    headlineUz: s("headlineUz"),
+    headlineRu: s("headlineRu"),
+    subtitleUz: s("subtitleUz"),
+    subtitleRu: s("subtitleRu"),
+    idleTextUz: s("idleTextUz"),
+    idleTextRu: s("idleTextRu"),
+    ctaLabelUz: s("ctaLabelUz"),
+    ctaLabelRu: s("ctaLabelRu"),
+    ctaUrl: s("ctaUrl"),
+    fontFamily: s("fontFamily"),
+    promoCode: s("promoCode"),
+    promoTextUz: s("promoTextUz"),
+    promoTextRu: s("promoTextRu"),
     analyticsToken: randomBytes(24).toString("hex"),
     active: true,
   });
@@ -46,51 +62,27 @@ async function createBrand(formData: FormData) {
 
 export default function NewBrandPage() {
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="max-w-2xl space-y-5">
       <h1 className="text-2xl font-bold">New brand</h1>
-      <form action={createBrand} encType="multipart/form-data" className="space-y-4">
-        <Field label="ID (slug)" name="id" required placeholder="mediapark" />
-        <Field label="Name" name="name" required placeholder="Mediapark" />
-        <Field label="Primary color" name="primaryColor" placeholder="#FF5E3A" />
-        <Field label="Accent color" name="accentColor" placeholder="#111111" />
-        <Field label="Idle text (UZ)" name="idleTextUz" />
-        <Field label="Idle text (RU)" name="idleTextRu" />
-        <Field label="Promo code" name="promoCode" />
-        <Field label="Promo text (UZ)" name="promoTextUz" />
-        <Field label="Promo text (RU)" name="promoTextRu" />
+      <form action={createBrand} className="space-y-4">
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Logo</span>
-          <input type="file" name="logo" accept="image/*" />
+          <span className="mb-1 block font-medium">ID (slug)</span>
+          <input
+            type="text"
+            name="id"
+            required
+            placeholder="mediapark"
+            className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
+          />
         </label>
-        <button type="submit" className="rounded-lg bg-neutral-900 px-4 py-2 text-white">
+        <BrandFormFields mode="create" />
+        <button
+          type="submit"
+          className="rounded-lg bg-neutral-900 px-4 py-2 text-white"
+        >
           Create
         </button>
       </form>
     </div>
-  );
-}
-
-function Field({
-  label,
-  name,
-  required,
-  placeholder,
-}: {
-  label: string;
-  name: string;
-  required?: boolean;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium">{label}</span>
-      <input
-        type="text"
-        name={name}
-        required={required}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2"
-      />
-    </label>
   );
 }

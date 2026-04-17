@@ -38,12 +38,24 @@ const EMPTY: Snapshot = {
   recent: [],
 };
 
+const MIN_KEY = "starface.admin.queue.min";
+
 export function QueuePanel() {
   const router = useRouter();
   const [snap, setSnap] = useState<Snapshot>(EMPTY);
   const [open, setOpen] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [connected, setConnected] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setMinimized(window.localStorage.getItem(MIN_KEY) === "1");
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(MIN_KEY, minimized ? "1" : "0");
+  }, [minimized]);
 
   const total = snap.queued + snap.running + snap.done + snap.error + snap.cancelled;
   const busy = snap.queued + snap.running > 0;
@@ -126,30 +138,59 @@ export function QueuePanel() {
 
   if (total === 0 && !busy) return null;
 
+  if (minimized) {
+    return (
+      <button
+        onClick={() => setMinimized(false)}
+        title={`Description queue · ${snap.running} running, ${snap.queued} queued`}
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-neutral-200 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white shadow-xl hover:bg-neutral-800"
+      >
+        <span className={"h-2 w-2 rounded-full " + (busy ? "bg-yellow-400 animate-pulse" : "bg-green-400")} />
+        <span>Desc</span>
+        {busy && <span className="font-mono text-white/80">{snap.running + snap.queued}</span>}
+      </button>
+    );
+  }
+
   return (
     <div className="fixed bottom-4 right-4 z-40 w-[min(96vw,480px)] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 bg-neutral-900 px-4 py-3 text-left text-sm font-semibold text-white"
-      >
-        <span className="flex items-center gap-2">
-          <span className={"h-2 w-2 rounded-full " + (busy ? "bg-yellow-400 animate-pulse" : "bg-green-400")} />
-          Description queue
-          <span className="text-xs font-normal text-white/70">
-            ({snap.workers} worker{snap.workers > 1 ? "s" : ""})
+      <div className="flex items-center gap-2 bg-neutral-900 pr-2 text-white">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold"
+        >
+          <span className="flex items-center gap-2">
+            <span className={"h-2 w-2 rounded-full " + (busy ? "bg-yellow-400 animate-pulse" : "bg-green-400")} />
+            Description queue
+            <span className="text-xs font-normal text-white/70">
+              ({snap.workers} worker{snap.workers > 1 ? "s" : ""})
+            </span>
+            {!connected && <span className="text-xs font-normal text-red-300">(disconnected)</span>}
           </span>
-          {!connected && <span className="text-xs font-normal text-red-300">(disconnected)</span>}
-        </span>
-        <span className="flex items-center gap-3 text-xs">
-          <Badge color="yellow" label="queued" value={snap.queued} />
-          <Badge color="blue" label="running" value={snap.running} />
-          <Badge color="green" label="done" value={snap.done} />
-          {snap.error > 0 && <Badge color="red" label="err" value={snap.error} />}
-          <svg width="12" height="12" viewBox="0 0 12 12" className={open ? "rotate-180" : ""}>
-            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="2" fill="none" />
+          <span className="flex items-center gap-3 text-xs">
+            <Badge color="yellow" label="queued" value={snap.queued} />
+            <Badge color="blue" label="running" value={snap.running} />
+            <Badge color="green" label="done" value={snap.done} />
+            {snap.error > 0 && <Badge color="red" label="err" value={snap.error} />}
+            <svg width="12" height="12" viewBox="0 0 12 12" className={open ? "rotate-180" : ""}>
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="2" fill="none" />
+            </svg>
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setOpen(false);
+            setMinimized(true);
+          }}
+          title="Minimize"
+          className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          aria-label="Minimize"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-        </span>
-      </button>
+        </button>
+      </div>
       {open && (
         <div className="max-h-[60vh] space-y-2 overflow-auto p-3">
           {snap.queued + snap.running > 0 && (

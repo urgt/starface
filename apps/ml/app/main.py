@@ -9,6 +9,7 @@ import os
 import shlex
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 import psycopg
@@ -17,12 +18,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import enrich as enrich_mod
+from . import enrich_attributes as attrs_mod
 from . import generate_descriptions as gd
 from .embed import (
     LowQualityError,
     MultipleFacesError,
     NoFaceError,
     embed_image,
+    embed_images_batch,
     warmup,
 )
 from .enrich_queue import EnrichQueue
@@ -76,6 +79,25 @@ class EmbedResponse(BaseModel):
     bbox: list[float]
     det_score: float
     face_quality: str
+    sex: str | None = None
+    age: int | None = None
+
+
+class EmbedMultiRequest(BaseModel):
+    images_base64: list[str] = Field(..., min_length=1, max_length=5)
+    allow_multiple: bool = Field(False, description="Pick center-most face if multiple")
+
+
+class EmbedMultiResponse(BaseModel):
+    embedding: list[float]
+    best_frame_index: int
+    accepted: int
+    rejected: list[dict]
+    bbox: list[float]
+    det_score: float
+    face_quality: str
+    sex: str | None = None
+    age: int | None = None
 
 
 @app.get("/ml/health")
@@ -102,6 +124,35 @@ def embed(req: EmbedRequest):
         bbox=result.bbox,
         det_score=result.det_score,
         face_quality=result.face_quality,
+        sex=result.sex,
+        age=result.age,
+    )
+
+
+@app.post("/ml/embed-multi", response_model=EmbedMultiResponse)
+def embed_multi(req: EmbedMultiRequest):
+    try:
+        result = embed_images_batch(req.images_base64, allow_multiple=req.allow_multiple)
+    except NoFaceError as e:
+        raise HTTPException(status_code=422, detail={"code": "no_face", "message": str(e)})
+    except MultipleFacesError as e:
+        raise HTTPException(status_code=422, detail={"code": "multiple_faces", "message": str(e)})
+    except LowQualityError as e:
+        raise HTTPException(status_code=422, detail={"code": "low_quality", "message": str(e)})
+    except Exception as e:
+        log.exception("embed-multi failure")
+        raise HTTPException(status_code=500, detail={"code": "internal", "message": str(e)})
+
+    return EmbedMultiResponse(
+        embedding=result.embedding,
+        best_frame_index=result.best_frame_index,
+        accepted=result.accepted,
+        rejected=result.rejected,
+        bbox=result.bbox,
+        det_score=result.det_score,
+        face_quality=result.face_quality,
+        sex=result.sex,
+        age=result.age,
     )
 
 
@@ -376,6 +427,33 @@ async def enrich_events():
             enrich_queue.unsubscribe(q)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Face-attribute back-fill (gender/age on existing celebrities)
+
+
+class AttrsBackfillRequest(BaseModel):
+    limit: int | None = Field(None, ge=1, le=5000)
+
+
+@app.post("/ml/enrich-attributes")
+async def enrich_attributes(req: AttrsBackfillRequest):
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url:
+        raise HTTPException(status_code=500, detail={"code": "internal", "message": "DATABASE_URL not set"})
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
+
+    def _run():
+        return attrs_mod.backfill(database_url, data_dir, limit=req.limit)
+
+    p = await asyncio.to_thread(_run)
+    return {
+        "total": p.total,
+        "updated": p.updated,
+        "skipped": p.skipped,
+        "errors": p.errors[:20],
+    }
 
 
 # unused-import guard

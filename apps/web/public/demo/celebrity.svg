@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <defs>
+    <radialGradient id="bg2" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1e3a5f" />
+      <stop offset="100%" stop-color="#0a0a0a" />
+    </radialGradient>
+    <linearGradient id="face2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f2c49a" />
+      <stop offset="100%" stop-color="#b97e5a" />
+    </linearGradient>
+    <linearGradient id="hair2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a1a" />
+      <stop offset="100%" stop-color="#0a0a0a" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#bg2)" />
+  <!-- spotlight -->
+  <circle cx="300" cy="200" r="220" fill="url(#bg2)" opacity="0.6" />
+  <!-- shoulders / suit -->
+  <path d="M 90 560 Q 300 360 510 560 L 510 600 L 90 600 Z" fill="#0f1a2e" />
+  <path d="M 270 420 L 300 470 L 330 420 L 330 600 L 270 600 Z" fill="#fff" opacity="0.9" />
+  <!-- neck -->
+  <rect x="265" y="360" width="70" height="70" fill="url(#face2)" />
+  <!-- face -->
+  <ellipse cx="300" cy="270" rx="115" ry="145" fill="url(#face2)" />
+  <!-- hair -->
+  <path d="M 185 250 Q 195 130 300 110 Q 405 130 415 250 Q 410 175 380 165 Q 300 120 220 165 Q 190 180 185 250 Z" fill="url(#hair2)" />
+  <!-- stubble shadow -->
+  <path d="M 220 340 Q 300 365 380 340 L 380 370 Q 300 385 220 370 Z" fill="#8b6244" opacity="0.25" />
+  <!-- eyes -->
+  <ellipse cx="260" cy="270" rx="11" ry="5" fill="#1a0f08" />
+  <ellipse cx="340" cy="270" rx="11" ry="5" fill="#1a0f08" />
+  <!-- brow -->
+  <path d="M 244 250 Q 260 244 276 250" stroke="#1a0f08" stroke-width="5" fill="none" stroke-linecap="round" />
+  <path d="M 324 250 Q 340 244 356 250" stroke="#1a0f08" stroke-width="5" fill="none" stroke-linecap="round" />
+  <!-- smile -->
+  <path d="M 258 330 Q 300 350 342 330" stroke="#7a3a2b" stroke-width="4" fill="none" stroke-linecap="round" />
+</svg>

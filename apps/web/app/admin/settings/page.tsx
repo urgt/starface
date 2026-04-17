@@ -1,4 +1,5 @@
 import { getLlmConfig, maskApiKey } from "@/lib/settings";
+import { AttrsBackfillSection } from "./AttrsBackfillSection";
 import { ImportSection } from "./ImportSection";
 import { SettingsForm } from "./SettingsForm";
 
@@ -17,6 +18,7 @@ export default async function SettingsPage() {
         }}
       />
       <ImportSection />
+      <AttrsBackfillSection />
     </div>
   );
 }

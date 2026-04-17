@@ -3,24 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Locale } from "@/lib/i18n";
+import { brandCssVars, type BrandTheme } from "@/lib/brand-theme";
 import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { GestureCamera, type GestureCameraHandle } from "./GestureCamera";
 import { IdleScreen } from "./IdleScreen";
 import { LocaleToggle } from "./LocaleToggle";
 import { RevealScreen, type RevealPayload } from "./RevealScreen";
 
-type BrandConfig = {
-  id: string;
-  name: string;
-  logoUrl: string | null;
-  primaryColor: string;
-  accentColor: string;
-  idleTextUz: string | null;
-  idleTextRu: string | null;
-};
-
 type Props = {
-  brand: BrandConfig;
+  brand: BrandTheme;
   appUrl: string;
 };
 
@@ -28,28 +19,21 @@ type Phase = "idle" | "analyzing" | "reveal" | "error";
 
 const LOCALE_KEY = "starface.locale";
 
-function readStoredLocale(): Locale {
-  if (typeof window === "undefined") return "uz";
-  const raw = window.localStorage.getItem(LOCALE_KEY);
-  return raw === "ru" ? "ru" : "uz";
-}
-
 export function KioskApp({ brand, appUrl }: Props) {
-  const [locale, setLocale] = useState<Locale>(readStoredLocale);
+  const [locale, setLocale] = useState<Locale>("uz");
   const [phase, setPhase] = useState<Phase>("idle");
   const [reveal, setReveal] = useState<RevealPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const cameraRef = useRef<GestureCameraHandle>(null);
   const shutterRef = useRef<HTMLAudioElement | null>(null);
 
-  const cssVars = useMemo(
-    () =>
-      ({
-        "--brand-primary": brand.primaryColor,
-        "--brand-accent": brand.accentColor,
-      }) as React.CSSProperties,
-    [brand.primaryColor, brand.accentColor],
-  );
+  const cssVars = useMemo(() => brandCssVars(brand), [brand]);
+
+  // Hydrate locale from localStorage after mount to avoid SSR mismatch.
+  useEffect(() => {
+    const raw = window.localStorage.getItem(LOCALE_KEY);
+    if (raw === "ru" || raw === "uz") setLocale(raw);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -62,6 +46,7 @@ export function KioskApp({ brand, appUrl }: Props) {
         if (cancelled || !r.ok) return;
         const audio = new Audio("/shutter.mp3");
         audio.preload = "auto";
+        audio.volume = 0.7;
         shutterRef.current = audio;
       })
       .catch(() => {});
@@ -81,11 +66,13 @@ export function KioskApp({ brand, appUrl }: Props) {
   const handleGesture = useCallback(async () => {
     if (phase !== "idle") return;
 
+    // Shutter fires exactly once here — at the moment the burst is captured.
+    // RevealScreen's flash is silent so we don't double up.
     shutterRef.current?.play().catch(() => {});
     fireEvent({ brandId: brand.id, eventType: "gesture_detected" });
 
-    const image = cameraRef.current?.capture();
-    if (!image) {
+    const frames = (await cameraRef.current?.captureBurst(3, 80)) ?? [];
+    if (frames.length === 0) {
       setErrorMessage("Не удалось сделать снимок");
       setPhase("error");
       setTimeout(resetToIdle, 3000);
@@ -97,8 +84,8 @@ export function KioskApp({ brand, appUrl }: Props) {
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId: brand.id, imageBase64: image }),
-        signal: AbortSignal.timeout(20_000),
+        body: JSON.stringify({ brandId: brand.id, imagesBase64: frames }),
+        signal: AbortSignal.timeout(25_000),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -116,30 +103,32 @@ export function KioskApp({ brand, appUrl }: Props) {
     }
   }, [phase, brand.id, resetToIdle]);
 
+  const cameraVariant =
+    phase === "idle" ? "corner" : phase === "analyzing" ? "hidden" : "hidden";
+
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black" style={cssVars}>
+    <div
+      className="relative h-screen w-screen overflow-hidden bg-brand-gradient-soft font-brand"
+      style={cssVars}
+    >
       <div className="absolute right-6 top-6 z-30">
         <LocaleToggle locale={locale} onChange={setLocale} />
       </div>
 
-      <div className={phase === "idle" ? "h-full w-full" : "absolute inset-0 opacity-0 pointer-events-none"}>
-        <GestureCamera
-          ref={cameraRef}
-          active={phase === "idle"}
-          onGestureDetected={handleGesture}
-        />
-        {phase === "idle" && (
-          <div className="pointer-events-none absolute inset-0">
-            <IdleScreen
-              brandName={brand.name}
-              logoUrl={brand.logoUrl}
-              idleTextUz={brand.idleTextUz}
-              idleTextRu={brand.idleTextRu}
-              locale={locale}
-            />
-          </div>
-        )}
-      </div>
+      {/* Idle screen: mosaic + headline, corner camera on top */}
+      {phase === "idle" && (
+        <div className="absolute inset-0">
+          <IdleScreen brand={brand} locale={locale} />
+        </div>
+      )}
+
+      {/* Camera is always mounted so stream + gesture detection persist */}
+      <GestureCamera
+        ref={cameraRef}
+        active={phase === "idle"}
+        onGestureDetected={handleGesture}
+        variant={cameraVariant}
+      />
 
       {phase === "analyzing" && <AnalyzingOverlay locale={locale} />}
 
@@ -147,15 +136,15 @@ export function KioskApp({ brand, appUrl }: Props) {
         <RevealScreen
           payload={reveal}
           locale={locale}
-          brandId={brand.id}
+          brand={brand}
           appUrl={appUrl}
           onReset={resetToIdle}
         />
       )}
 
       {phase === "error" && errorMessage && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/85">
-          <div className="max-w-xl rounded-2xl bg-neutral-900 p-8 text-center">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/85 backdrop-blur-sm">
+          <div className="max-w-xl rounded-3xl border border-white/10 bg-neutral-900/80 p-10 text-center shadow-2xl">
             <p className="text-2xl font-semibold text-red-300">{errorMessage}</p>
             <p className="mt-2 text-neutral-500">Возврат к заставке...</p>
           </div>
