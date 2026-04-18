@@ -16,6 +16,7 @@ data/
 .env
 .env.local
 .env.*.local
+.dev.vars
 
 # editor
 .vscode/

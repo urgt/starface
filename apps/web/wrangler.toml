@@ -14,20 +14,24 @@ DISPLAY_MIN_PCT = "60"
 DISPLAY_MAX_PCT = "97"
 USER_PHOTO_TTL_HOURS = "24"
 NEXT_PUBLIC_APP_URL = "https://starface.pages.dev"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "starface"
 database_id = "41f8d661-8f3f-4e4e-9c70-a09d0b0f342e"
 migrations_dir = "drizzle/migrations"
+remote = true
 
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "starface-storage"
+remote = true
 
 [[vectorize]]
 binding = "FACES"
 index_name = "starface-faces"
+remote = true
 
 [triggers]
 crons = ["0 */6 * * *"]

@@ -1,5 +1,11 @@
 # @starface/scripts — local seed tooling
 
+> **DEPRECATED (2026-04):** The online admin UI at `/admin/import` (bulk Wikidata
+> import) and `/admin/celebrities/[id]` (per-celeb photo search + Gemini
+> description generation) replaces this CLI pipeline. Keep this folder for
+> offline operations during a Commons or Wikidata outage. No new features land
+> here.
+
 Runs on the operator's machine. **Does not run in Cloudflare Workers.**
 
 Pipeline:
