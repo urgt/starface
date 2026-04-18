@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { detectAndEmbed, FaceEmbedError } from "@/lib/face-embed";
+
 export type CelebrityPhotoMini = {
   id: string;
   photoPath: string;
@@ -34,11 +36,6 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
   const [selected, setSelected] = useState<CelebrityRow | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category>("all");
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
-  const [enqueuing, setEnqueuing] = useState(false);
-  const [enriching, setEnriching] = useState(false);
-  const [targetCount, setTargetCount] = useState(8);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -54,77 +51,6 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
       );
     });
   }, [celebrities, query, category]);
-
-  function toggleChecked(id: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function clearSelection() {
-    setChecked(new Set());
-  }
-
-  async function enqueueRegenerate(opts: { ids?: string[]; all?: boolean; onlyEmpty?: boolean }) {
-    setEnqueuing(true);
-    try {
-      const res = await fetch("/api/admin/describe/enqueue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(opts),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        setToast(`✗ enqueue failed: ${text.slice(0, 100)}`);
-        return;
-      }
-      const data = (await res.json()) as { enqueued: number };
-      setToast(
-        `✓ Enqueued ${data.enqueued} job${data.enqueued === 1 ? "" : "s"}. ` +
-          "Progress in bottom-right queue panel.",
-      );
-      clearSelection();
-    } catch (e) {
-      setToast(`✗ ${(e as Error).message}`);
-    } finally {
-      setEnqueuing(false);
-      setTimeout(() => setToast(null), 6000);
-    }
-  }
-
-  async function enqueueEnrich(opts: {
-    ids?: string[];
-    all?: boolean;
-    onlyMissing?: boolean;
-  }) {
-    setEnriching(true);
-    try {
-      const res = await fetch("/api/admin/enrich/enqueue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...opts, targetCount }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        setToast(`✗ enrich enqueue failed: ${text.slice(0, 100)}`);
-        return;
-      }
-      const data = (await res.json()) as { enqueued: number };
-      setToast(
-        `📸 Enqueued ${data.enqueued} enrichment job${data.enqueued === 1 ? "" : "s"}. ` +
-          "Progress in bottom-left panel.",
-      );
-      clearSelection();
-    } catch (e) {
-      setToast(`✗ ${(e as Error).message}`);
-    } finally {
-      setEnriching(false);
-      setTimeout(() => setToast(null), 6000);
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -143,114 +69,20 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
               onClick={() => setCategory(c)}
               className={
                 "rounded-md px-3 py-1 font-medium capitalize transition-colors " +
-                (category === c ? "bg-neutral-900 text-white" : "text-neutral-600 hover:text-neutral-900")
+                (category === c
+                  ? "bg-neutral-900 text-white"
+                  : "text-neutral-600 hover:text-neutral-900")
               }
             >
               {c}
             </button>
           ))}
         </div>
-        <button
-          onClick={() => {
-            if (!confirm("Regenerate descriptions for ALL celebrities? This can take a long time."))
-              return;
-            enqueueRegenerate({ all: true });
-          }}
-          disabled={enqueuing}
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-        >
-          🔄 Regenerate all
-        </button>
-        <button
-          onClick={() => enqueueRegenerate({ all: true, onlyEmpty: true })}
-          disabled={enqueuing}
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-        >
-          🔄 Regenerate missing
-        </button>
       </div>
-
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-sm">
-        <span className="font-semibold text-indigo-900">📸 Photo enrichment</span>
-        <label className="flex items-center gap-1 text-xs text-indigo-900">
-          target
-          <input
-            type="number"
-            min={1}
-            max={30}
-            value={targetCount}
-            onChange={(e) => setTargetCount(Math.max(1, Math.min(30, Number(e.target.value) || 8)))}
-            className="w-14 rounded-md border border-indigo-300 bg-white px-2 py-1 text-center text-xs"
-          />
-        </label>
-        <button
-          onClick={() => enqueueEnrich({ onlyMissing: true })}
-          disabled={enriching}
-          className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
-        >
-          Enrich missing
-        </button>
-        <button
-          onClick={() => {
-            if (checked.size === 0) {
-              setToast("Select celebrities first");
-              setTimeout(() => setToast(null), 3000);
-              return;
-            }
-            enqueueEnrich({ ids: Array.from(checked) });
-          }}
-          disabled={enriching}
-          className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
-        >
-          Enrich selected ({checked.size})
-        </button>
-        <button
-          onClick={() => {
-            if (
-              !confirm(
-                `Enrich ALL celebrities up to ${targetCount} photos each? This can take hours.`,
-              )
-            )
-              return;
-            enqueueEnrich({ all: true });
-          }}
-          disabled={enriching}
-          className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
-        >
-          Enrich all
-        </button>
-      </div>
-
-      {checked.size > 0 && (
-        <div className="sticky top-16 z-20 flex items-center justify-between gap-3 rounded-xl border border-neutral-300 bg-white px-4 py-2 shadow-sm">
-          <p className="text-sm font-medium">Selected: {checked.size}</p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => enqueueRegenerate({ ids: Array.from(checked) })}
-              disabled={enqueuing}
-              className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              🔄 Regenerate selected ({checked.size})
-            </button>
-            <button
-              onClick={clearSelection}
-              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {filtered.map((c) => (
-          <CelebrityCard
-            key={c.id}
-            celeb={c}
-            checked={checked.has(c.id)}
-            onCheck={() => toggleChecked(c.id)}
-            onOpen={() => setSelected(c)}
-          />
+          <CelebrityCard key={c.id} celeb={c} onOpen={() => setSelected(c)} />
         ))}
         {filtered.length === 0 && (
           <p className="col-span-full rounded-xl border border-dashed border-neutral-300 p-8 text-center text-neutral-400">
@@ -269,60 +101,15 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
           }}
         />
       )}
-
-      {toast && (
-        <div className="fixed bottom-24 right-4 z-50 max-w-sm rounded-xl bg-neutral-900 px-4 py-3 text-sm text-white shadow-xl">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
 
-function CelebrityCard({
-  celeb,
-  checked,
-  onCheck,
-  onOpen,
-}: {
-  celeb: CelebrityRow;
-  checked: boolean;
-  onCheck: () => void;
-  onOpen: () => void;
-}) {
-  const preview =
-    celeb.descriptionUz || celeb.descriptionRu || celeb.descriptionEn || "";
+function CelebrityCard({ celeb, onOpen }: { celeb: CelebrityRow; onOpen: () => void }) {
+  const preview = celeb.descriptionUz || celeb.descriptionRu || celeb.descriptionEn || "";
   const primary = celeb.primaryPhotoPath ?? celeb.photos[0]?.photoPath ?? null;
   return (
-    <div
-      className={
-        "group relative overflow-hidden rounded-xl border bg-white text-left transition-shadow hover:shadow-md " +
-        (checked ? "border-neutral-900 ring-2 ring-neutral-900/30" : "border-neutral-200")
-      }
-    >
-      <label
-        className={
-          "absolute left-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border transition-opacity " +
-          (checked
-            ? "border-neutral-900 bg-neutral-900 text-white"
-            : "border-neutral-300 bg-white/90 opacity-0 group-hover:opacity-100")
-        }
-        onClick={(e) => e.stopPropagation()}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onCheck}
-          className="sr-only"
-          aria-label={`Select ${celeb.name}`}
-        />
-        {checked && (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </label>
-
+    <div className="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-shadow hover:shadow-md">
       <button onClick={onOpen} className="block w-full text-left">
         {primary ? (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -352,8 +139,8 @@ function CelebrityCard({
                 (celeb.photoCount <= 1
                   ? "text-red-500"
                   : celeb.photoCount < 5
-                  ? "text-amber-500"
-                  : "text-green-600")
+                    ? "text-amber-500"
+                    : "text-green-600")
               }
             >
               📷 {celeb.photoCount}
@@ -364,9 +151,6 @@ function CelebrityCard({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Modal
 
 type CelebrityDetail = {
   id: string;
@@ -472,7 +256,9 @@ function CelebrityModal({
               onDeleted={onClose}
             />
           )}
-          {!detail && !loading && !error && <p className="text-neutral-500">No data ({initialName}).</p>}
+          {!detail && !loading && !error && (
+            <p className="text-neutral-500">No data ({initialName}).</p>
+          )}
         </div>
       </div>
     </div>
@@ -504,17 +290,20 @@ function ViewMode({
             <span className="rounded-full bg-neutral-100 px-2 py-1">📷 {detail.photos.length}</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={onEdit}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
-          >
-            Edit
-          </button>
-        </div>
+        <button
+          onClick={onEdit}
+          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Edit
+        </button>
       </header>
 
-      <PhotoGallery celebrityId={detail.id} photos={detail.photos} onChanged={onRefresh} onDeletedCeleb={onDeleted} />
+      <PhotoGallery
+        celebrityId={detail.id}
+        photos={detail.photos}
+        onChanged={onRefresh}
+        onDeletedCeleb={onDeleted}
+      />
 
       <Section label="Uzbek" value={detail.descriptionUz} />
       <Section label="Russian" value={detail.descriptionRu} />
@@ -573,9 +362,7 @@ function EditMode({
   const [wikidataId, setWikidataId] = useState(detail.wikidataId ?? "");
   const [active, setActive] = useState(detail.active);
   const [saving, setSaving] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [enrichingOne, setEnrichingOne] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -594,51 +381,15 @@ function EditMode({
           active,
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
       onSaved();
     } catch (e) {
       alert("Save failed: " + (e as Error).message);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function regenerate() {
-    setRegenerating(true);
-    try {
-      const res = await fetch(`/api/admin/celebrities/${detail.id}/regenerate-description`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setDescUz(data.uz ?? descUz);
-      setDescRu(data.ru ?? descRu);
-      setDescEn(data.en ?? descEn);
-    } catch (e) {
-      alert("Regenerate failed: " + (e as Error).message);
-    } finally {
-      setRegenerating(false);
-    }
-  }
-
-  async function enrichOne() {
-    setEnrichingOne(true);
-    try {
-      const res = await fetch("/api/admin/enrich/enqueue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [detail.id], targetCount: 8 }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert("Enrich failed: " + (data.error ?? res.status));
-        return;
-      }
-      alert(`📸 Enqueued — watch progress in the bottom-left queue panel.`);
-    } catch (e) {
-      alert("Enrich failed: " + (e as Error).message);
-    } finally {
-      setEnrichingOne(false);
     }
   }
 
@@ -677,16 +428,13 @@ function EditMode({
         </div>
       </header>
 
-      <div className="flex items-center justify-end gap-2">
-        <button
-          onClick={enrichOne}
-          disabled={enrichingOne}
-          className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
-        >
-          {enrichingOne ? "Enqueuing…" : "📸 Find more photos"}
-        </button>
-      </div>
-      <PhotoGallery celebrityId={detail.id} photos={detail.photos} onChanged={onRefresh} editable onDeletedCeleb={onDeleted} />
+      <PhotoGallery
+        celebrityId={detail.id}
+        photos={detail.photos}
+        onChanged={onRefresh}
+        editable
+        onDeletedCeleb={onDeleted}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
@@ -727,28 +475,15 @@ function EditMode({
           />
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(e) => setActive(e.target.checked)}
-          />
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           <span className="font-medium">Active</span>
         </label>
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-            Descriptions
-          </h3>
-          <button
-            onClick={regenerate}
-            disabled={regenerating}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-          >
-            {regenerating ? "Regenerating…" : "🔄 Regenerate from Wikipedia"}
-          </button>
-        </div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
+          Descriptions
+        </h3>
         <DescField label="Uzbek" value={descUz} onChange={setDescUz} />
         <DescField label="Russian" value={descRu} onChange={setDescRu} />
         <DescField label="English" value={descEn} onChange={setDescEn} />
@@ -800,8 +535,17 @@ function Section({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Photo gallery
+async function fileToBitmap(file: File): Promise<ImageBitmap> {
+  return await createImageBitmap(file);
+}
+
+async function readFileAsBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
 
 function PhotoGallery({
   celebrityId,
@@ -823,28 +567,58 @@ function PhotoGallery({
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
-    setUploadLog([`→ uploading ${files.length} file(s)…`]);
-    const form = new FormData();
-    for (const f of Array.from(files)) form.append("photos", f);
+    setUploadLog([`→ processing ${files.length} file(s)…`]);
+    const payloads: Array<{
+      imageBase64: string;
+      imageExt: "jpg" | "jpeg" | "png" | "webp";
+      embedding: number[];
+      detScore: number;
+      faceQuality: "high" | "medium";
+    }> = [];
+
+    for (const file of Array.from(files)) {
+      try {
+        const bitmap = await fileToBitmap(file);
+        const result = await detectAndEmbed(bitmap);
+        bitmap.close();
+        const base64 = await readFileAsBase64(file);
+        const rawExt = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const ext: "jpg" | "jpeg" | "png" | "webp" =
+          rawExt === "png" ? "png" : rawExt === "webp" ? "webp" : rawExt === "jpeg" ? "jpeg" : "jpg";
+        payloads.push({
+          imageBase64: base64,
+          imageExt: ext,
+          embedding: result.embedding,
+          detScore: result.detScore,
+          faceQuality: result.faceQuality,
+        });
+        setUploadLog((p) => [...p, `✓ ${file.name} (quality: ${result.faceQuality})`]);
+      } catch (e) {
+        const code = e instanceof FaceEmbedError ? e.code : (e as Error).message;
+        setUploadLog((p) => [...p, `✗ ${file.name} — ${code}`]);
+      }
+    }
+
+    if (payloads.length === 0) {
+      setUploading(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/admin/celebrities/${celebrityId}/photos`, {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos: payloads }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as {
-        results: Array<{ name: string; status: string; error?: string; faceQuality?: string }>;
+        results: Array<{ status: string; error?: string }>;
       };
-      for (const r of data.results) {
-        if (r.status === "ok") {
-          setUploadLog((p) => [...p, `✓ ${r.name} (quality: ${r.faceQuality ?? "—"})`]);
-        } else {
-          setUploadLog((p) => [...p, `✗ ${r.name} — ${r.error}`]);
-        }
-      }
+      const okCount = data.results.filter((r) => r.status === "ok").length;
+      setUploadLog((p) => [...p, `→ saved ${okCount}/${data.results.length}`]);
       onChanged();
     } catch (e) {
-      setUploadLog((p) => [...p, `✗ ${(e as Error).message}`]);
+      setUploadLog((p) => [...p, `✗ upload failed: ${(e as Error).message}`]);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -852,10 +626,9 @@ function PhotoGallery({
   }
 
   async function setPrimary(photoId: string) {
-    const res = await fetch(
-      `/api/admin/celebrities/${celebrityId}/photos/${photoId}/primary`,
-      { method: "POST" },
-    );
+    const res = await fetch(`/api/admin/celebrities/${celebrityId}/photos/${photoId}/primary`, {
+      method: "POST",
+    });
     if (!res.ok) {
       alert("Set primary failed: " + res.status);
       return;
@@ -876,7 +649,9 @@ function PhotoGallery({
               "Click OK to delete, Cancel to keep.",
           )
         ) {
-          const delRes = await fetch(`/api/admin/celebrities/${celebrityId}`, { method: "DELETE" });
+          const delRes = await fetch(`/api/admin/celebrities/${celebrityId}`, {
+            method: "DELETE",
+          });
           if (delRes.ok && onDeletedCeleb) onDeletedCeleb();
           return;
         }
@@ -921,11 +696,7 @@ function PhotoGallery({
             className="group relative overflow-hidden rounded-xl border border-neutral-200 bg-black"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={p.photoUrl}
-              alt="celebrity"
-              className="aspect-square w-full object-contain"
-            />
+            <img src={p.photoUrl} alt="celebrity" className="aspect-square w-full object-contain" />
             {p.isPrimary && (
               <span className="absolute left-2 top-2 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-900">
                 ★ primary
@@ -965,4 +736,3 @@ function PhotoGallery({
     </div>
   );
 }
-

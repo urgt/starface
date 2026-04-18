@@ -1,7 +1,7 @@
+import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 
-import { db } from "@/lib/db";
+import { db, schema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,19 +11,29 @@ export async function POST(
 ) {
   const { id, photoId } = await params;
 
-  const rows = await db.execute<{ id: string }>(sql`
-    SELECT id FROM celebrity_photos WHERE celebrity_id = ${id} AND id = ${photoId} LIMIT 1
-  `);
-  if (!rows.length) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const [target] = await db
+    .select({ id: schema.celebrityPhotos.id })
+    .from(schema.celebrityPhotos)
+    .where(
+      and(eq(schema.celebrityPhotos.celebrityId, id), eq(schema.celebrityPhotos.id, photoId)),
+    )
+    .limit(1);
+  if (!target) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Two-step to avoid tripping the partial unique index during row-by-row evaluation.
-  await db.execute(sql`
-    UPDATE celebrity_photos SET is_primary = false
-      WHERE celebrity_id = ${id} AND is_primary = true AND id <> ${photoId}
-  `);
-  await db.execute(sql`
-    UPDATE celebrity_photos SET is_primary = true WHERE id = ${photoId}
-  `);
+  await db
+    .update(schema.celebrityPhotos)
+    .set({ isPrimary: false })
+    .where(
+      and(
+        eq(schema.celebrityPhotos.celebrityId, id),
+        eq(schema.celebrityPhotos.isPrimary, true),
+        ne(schema.celebrityPhotos.id, photoId),
+      ),
+    );
+  await db
+    .update(schema.celebrityPhotos)
+    .set({ isPrimary: true })
+    .where(eq(schema.celebrityPhotos.id, photoId));
 
   return NextResponse.json({ ok: true });
 }

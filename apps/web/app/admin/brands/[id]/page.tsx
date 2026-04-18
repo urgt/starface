@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import path from "node:path";
-import { promises as fs } from "node:fs";
 import { eq } from "drizzle-orm";
 
-import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
+import { saveBrandLogo } from "@/lib/storage";
 import { BrandFormFields } from "../BrandFormFields";
 
 export const dynamic = "force-dynamic";
@@ -32,13 +30,10 @@ export default async function EditBrandPage({
     let logoPath = brand.logoPath;
     const logo = formData.get("logo");
     if (logo instanceof File && logo.size > 0) {
-      const dir = path.join(appConfig.dataDir, "logos");
-      await fs.mkdir(dir, { recursive: true });
-      const ext = (logo.name.split(".").pop() || "png").toLowerCase();
-      const filename = `${id}-${Date.now()}.${ext}`;
-      const buffer = Buffer.from(await logo.arrayBuffer());
-      await fs.writeFile(path.join(dir, filename), buffer);
-      logoPath = `logos/${filename}`;
+      const ext = logo.name.split(".").pop() || "png";
+      const buffer = await logo.arrayBuffer();
+      const saved = await saveBrandLogo(buffer, id, ext);
+      logoPath = saved.relativePath;
     }
 
     const s = (key: string): string | null => {

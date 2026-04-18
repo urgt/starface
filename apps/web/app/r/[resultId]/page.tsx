@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
@@ -31,51 +31,45 @@ type ResultRow = {
 };
 
 async function loadResult(resultId: string): Promise<ResultRow | null> {
-  const rows = await db.execute<{
-    id: string;
-    similarity: number;
-    user_photo_path: string;
-    expires_at: Date;
-    brand_id: string | null;
-    celebrity_id: string | null;
-    celebrity_name: string | null;
-    celebrity_name_ru: string | null;
-    celebrity_description_uz: string | null;
-    celebrity_description_ru: string | null;
-    celebrity_description_en: string | null;
-    celebrity_photo_path: string | null;
-  }>(sql`
-    SELECT m.id, m.similarity, m.user_photo_path, m.expires_at, m.brand_id,
-           c.id AS celebrity_id,
-           c.name AS celebrity_name,
-           c.name_ru AS celebrity_name_ru,
-           c.description_uz AS celebrity_description_uz,
-           c.description_ru AS celebrity_description_ru,
-           c.description_en AS celebrity_description_en,
-           cp.photo_path AS celebrity_photo_path
-      FROM match_results m
-      LEFT JOIN celebrities c ON c.id = m.celebrity_id
-      LEFT JOIN celebrity_photos cp ON cp.id = m.celebrity_photo_id
-      WHERE m.id = ${resultId}
-      LIMIT 1
-  `);
-  const row = rows[0];
+  const [row] = await db
+    .select({
+      id: schema.matchResults.id,
+      similarity: schema.matchResults.similarity,
+      userPhotoPath: schema.matchResults.userPhotoPath,
+      expiresAt: schema.matchResults.expiresAt,
+      brandId: schema.matchResults.brandId,
+      celebrityId: schema.celebrities.id,
+      celebrityName: schema.celebrities.name,
+      celebrityNameRu: schema.celebrities.nameRu,
+      celebrityDescriptionUz: schema.celebrities.descriptionUz,
+      celebrityDescriptionRu: schema.celebrities.descriptionRu,
+      celebrityDescriptionEn: schema.celebrities.descriptionEn,
+      celebrityPhotoPath: schema.celebrityPhotos.photoPath,
+    })
+    .from(schema.matchResults)
+    .leftJoin(schema.celebrities, eq(schema.celebrities.id, schema.matchResults.celebrityId))
+    .leftJoin(
+      schema.celebrityPhotos,
+      eq(schema.celebrityPhotos.id, schema.matchResults.celebrityPhotoId),
+    )
+    .where(eq(schema.matchResults.id, resultId))
+    .limit(1);
   if (!row) return null;
   return {
     id: row.id,
     similarity: row.similarity,
-    user_photo_path: row.user_photo_path,
-    expires_at: new Date(row.expires_at),
-    brand_id: row.brand_id,
-    celebrity: row.celebrity_id
+    user_photo_path: row.userPhotoPath,
+    expires_at: new Date(row.expiresAt),
+    brand_id: row.brandId,
+    celebrity: row.celebrityId
       ? {
-          id: row.celebrity_id,
-          name: row.celebrity_name,
-          nameRu: row.celebrity_name_ru,
-          descriptionUz: row.celebrity_description_uz,
-          descriptionRu: row.celebrity_description_ru,
-          descriptionEn: row.celebrity_description_en,
-          photoPath: row.celebrity_photo_path,
+          id: row.celebrityId,
+          name: row.celebrityName,
+          nameRu: row.celebrityNameRu,
+          descriptionUz: row.celebrityDescriptionUz,
+          descriptionRu: row.celebrityDescriptionRu,
+          descriptionEn: row.celebrityDescriptionEn,
+          photoPath: row.celebrityPhotoPath,
         }
       : null,
   };

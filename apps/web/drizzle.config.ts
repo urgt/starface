@@ -3,9 +3,12 @@ import type { Config } from "drizzle-kit";
 export default {
   schema: "./drizzle/schema.ts",
   out: "./drizzle/migrations",
-  dialect: "postgresql",
+  dialect: "sqlite",
+  driver: "d1-http",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgresql://starface:starface@localhost:5432/starface",
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+    databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID ?? "",
+    token: process.env.CLOUDFLARE_D1_TOKEN ?? "",
   },
   verbose: true,
   strict: true,

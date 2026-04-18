@@ -1,20 +1,17 @@
 import { sql } from "drizzle-orm";
 import {
-  bigserial,
-  boolean,
   index,
   integer,
-  jsonb,
-  pgTable,
   real,
+  sqliteTable,
   text,
-  timestamp,
   uniqueIndex,
-  uuid,
-  vector,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 
-export const brands = pgTable("brands", {
+const newId = () => crypto.randomUUID();
+const now = () => new Date();
+
+export const brands = sqliteTable("brands", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   logoPath: text("logo_path"),
@@ -36,14 +33,14 @@ export const brands = pgTable("brands", {
   promoTextUz: text("promo_text_uz"),
   promoTextRu: text("promo_text_ru"),
   analyticsToken: text("analytics_token").notNull().unique(),
-  active: boolean("active").default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  active: integer("active", { mode: "boolean" }).default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(now),
 });
 
-export const celebrities = pgTable(
+export const celebrities = sqliteTable(
   "celebrities",
   {
-    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    id: text("id").primaryKey().$defaultFn(newId),
     name: text("name").notNull(),
     nameRu: text("name_ru"),
     descriptionUz: text("description_uz"),
@@ -55,25 +52,25 @@ export const celebrities = pgTable(
     gender: text("gender"),
     age: integer("age"),
     attrsSource: text("attrs_source"),
-    active: boolean("active").default(true),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    active: integer("active", { mode: "boolean" }).default(true),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(now),
   },
   (t) => ({
     popularityIdx: index("celebrities_popularity_idx").on(t.popularity),
     genderIdx: index("celebrities_gender_idx").on(t.gender),
+    wikidataIdx: index("celebrities_wikidata_id_idx").on(t.wikidataId),
   }),
 );
 
-export const celebrityPhotos = pgTable(
+export const celebrityPhotos = sqliteTable(
   "celebrity_photos",
   {
-    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
-    celebrityId: uuid("celebrity_id")
+    id: text("id").primaryKey().$defaultFn(newId),
+    celebrityId: text("celebrity_id")
       .notNull()
       .references(() => celebrities.id, { onDelete: "cascade" }),
     photoPath: text("photo_path").notNull(),
-    embedding: vector("embedding", { dimensions: 512 }).notNull(),
-    isPrimary: boolean("is_primary").notNull().default(false),
+    isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
     faceQuality: text("face_quality"),
     detScore: real("det_score"),
     source: text("source"),
@@ -81,35 +78,39 @@ export const celebrityPhotos = pgTable(
     blurScore: real("blur_score"),
     frontalScore: real("frontal_score"),
     overallScore: real("overall_score"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(now),
   },
   (t) => ({
-    embeddingIdx: index("celebrity_photos_embedding_idx").using(
-      "hnsw",
-      t.embedding.op("vector_cosine_ops"),
-    ),
     celebIdx: index("celebrity_photos_celeb_idx").on(t.celebrityId),
     primaryIdx: uniqueIndex("celebrity_photos_primary_idx")
       .on(t.celebrityId)
-      .where(sql`${t.isPrimary} = true`),
+      .where(sql`${t.isPrimary} = 1`),
     scoreIdx: index("celebrity_photos_score_idx").on(t.celebrityId, t.overallScore),
   }),
 );
 
-export const matchResults = pgTable(
+export type MatchAlternative = {
+  celebrityId: string;
+  celebrityPhotoId: string;
+  similarity: number;
+};
+
+export const matchResults = sqliteTable(
   "match_results",
   {
-    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    id: text("id").primaryKey().$defaultFn(newId),
     brandId: text("brand_id").references(() => brands.id),
-    celebrityId: uuid("celebrity_id").references(() => celebrities.id, { onDelete: "set null" }),
-    celebrityPhotoId: uuid("celebrity_photo_id").references(() => celebrityPhotos.id, {
+    celebrityId: text("celebrity_id").references(() => celebrities.id, {
+      onDelete: "set null",
+    }),
+    celebrityPhotoId: text("celebrity_photo_id").references(() => celebrityPhotos.id, {
       onDelete: "set null",
     }),
     similarity: real("similarity").notNull(),
     userPhotoPath: text("user_photo_path").notNull(),
-    alternatives: jsonb("alternatives"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    alternatives: text("alternatives", { mode: "json" }).$type<MatchAlternative[]>(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(now),
   },
   (t) => ({
     expiresIdx: index("match_results_expires_idx").on(t.expiresAt),
@@ -117,15 +118,15 @@ export const matchResults = pgTable(
   }),
 );
 
-export const events = pgTable(
+export const events = sqliteTable(
   "events",
   {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
+    id: integer("id").primaryKey({ autoIncrement: true }),
     brandId: text("brand_id"),
-    resultId: uuid("result_id"),
+    resultId: text("result_id"),
     eventType: text("event_type").notNull(),
-    metadata: jsonb("metadata"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).$defaultFn(now),
   },
   (t) => ({
     brandIdx: index("events_brand_idx").on(t.brandId, t.createdAt),
@@ -133,10 +134,10 @@ export const events = pgTable(
   }),
 );
 
-export const appSettings = pgTable("app_settings", {
+export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$defaultFn(now),
 });
 
 export type Brand = typeof brands.$inferSelect;

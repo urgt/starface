@@ -1,20 +1,21 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 
 import * as schema from "@/drizzle/schema";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __sfPgClient: ReturnType<typeof postgres> | undefined;
+type AppDb = DrizzleD1Database<typeof schema>;
+
+function makeDb(): AppDb {
+  const { env } = getCloudflareContext();
+  return drizzle(env.DB, { schema });
 }
 
-const connectionString =
-  process.env.DATABASE_URL ?? "postgresql://starface:starface@localhost:5432/starface";
+export const db = new Proxy({} as AppDb, {
+  get(_target, prop, receiver) {
+    const real = makeDb();
+    const value = Reflect.get(real, prop, receiver);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
 
-const client = global.__sfPgClient ?? postgres(connectionString, { max: 10 });
-if (process.env.NODE_ENV !== "production") {
-  global.__sfPgClient = client;
-}
-
-export const db = drizzle(client, { schema });
 export { schema };

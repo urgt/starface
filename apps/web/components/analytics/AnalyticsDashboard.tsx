@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 
-import { db } from "@/lib/db";
+import { db, schema } from "@/lib/db";
 
 type Funnel = {
   kiosk_opened: number;
@@ -12,21 +12,28 @@ type Funnel = {
 
 type TopMatch = {
   name: string;
-  name_ru: string | null;
+  nameRu: string | null;
   category: string | null;
-  match_count: number;
+  matchCount: number;
 };
 
 type DailyRow = { day: string; c: number };
 
+function since(days: number): Date {
+  return new Date(Date.now() - days * 24 * 3600_000);
+}
+
 async function loadFunnel(brandId: string | null): Promise<Funnel> {
-  const rows = await db.execute<{ event_type: string; c: number }>(sql`
-    SELECT event_type, count(*)::int AS c
-    FROM events
-    WHERE (${brandId}::text IS NULL OR brand_id = ${brandId})
-      AND created_at > now() - interval '30 days'
-    GROUP BY event_type
-  `);
+  const thirtyDaysAgo = since(30);
+  const whereClause = brandId
+    ? and(eq(schema.events.brandId, brandId), gte(schema.events.createdAt, thirtyDaysAgo))
+    : gte(schema.events.createdAt, thirtyDaysAgo);
+  const rows = await db
+    .select({ eventType: schema.events.eventType, c: count() })
+    .from(schema.events)
+    .where(whereClause)
+    .groupBy(schema.events.eventType);
+
   const funnel: Funnel = {
     kiosk_opened: 0,
     gesture_detected: 0,
@@ -35,35 +42,53 @@ async function loadFunnel(brandId: string | null): Promise<Funnel> {
     share_clicked: 0,
   };
   for (const r of rows) {
-    if (r.event_type in funnel) funnel[r.event_type as keyof Funnel] = r.c;
+    if (r.eventType in funnel) funnel[r.eventType as keyof Funnel] = r.c;
   }
   return funnel;
 }
 
 async function loadTop(brandId: string | null): Promise<TopMatch[]> {
-  return db.execute<TopMatch>(sql`
-    SELECT c.name, c.name_ru, c.category, count(*)::int AS match_count
-    FROM match_results m
-    JOIN celebrities c ON c.id = m.celebrity_id
-    WHERE (${brandId}::text IS NULL OR m.brand_id = ${brandId})
-      AND m.created_at > now() - interval '30 days'
-    GROUP BY c.name, c.name_ru, c.category
-    ORDER BY match_count DESC
-    LIMIT 20
-  `);
+  const thirtyDaysAgo = since(30);
+  const whereClause = brandId
+    ? and(
+        eq(schema.matchResults.brandId, brandId),
+        gte(schema.matchResults.createdAt, thirtyDaysAgo),
+      )
+    : gte(schema.matchResults.createdAt, thirtyDaysAgo);
+  return db
+    .select({
+      name: schema.celebrities.name,
+      nameRu: schema.celebrities.nameRu,
+      category: schema.celebrities.category,
+      matchCount: count(),
+    })
+    .from(schema.matchResults)
+    .innerJoin(schema.celebrities, eq(schema.celebrities.id, schema.matchResults.celebrityId))
+    .where(whereClause)
+    .groupBy(schema.celebrities.name, schema.celebrities.nameRu, schema.celebrities.category)
+    .orderBy(desc(count()))
+    .limit(20);
 }
 
 async function loadDaily(brandId: string | null): Promise<DailyRow[]> {
-  return db.execute<DailyRow>(sql`
-    SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
-           count(*)::int AS c
-    FROM events
-    WHERE (${brandId}::text IS NULL OR brand_id = ${brandId})
-      AND event_type = 'match_completed'
-      AND created_at > now() - interval '30 days'
-    GROUP BY day
-    ORDER BY day
-  `);
+  const thirtyDaysAgo = since(30);
+  const dayExpr = sql<string>`strftime('%Y-%m-%d', ${schema.events.createdAt} / 1000, 'unixepoch')`;
+  const whereClause = brandId
+    ? and(
+        eq(schema.events.brandId, brandId),
+        eq(schema.events.eventType, "match_completed"),
+        gte(schema.events.createdAt, thirtyDaysAgo),
+      )
+    : and(
+        eq(schema.events.eventType, "match_completed"),
+        gte(schema.events.createdAt, thirtyDaysAgo),
+      );
+  return db
+    .select({ day: dayExpr, c: count() })
+    .from(schema.events)
+    .where(whereClause)
+    .groupBy(dayExpr)
+    .orderBy(dayExpr);
 }
 
 export async function AnalyticsDashboard({ brandId }: { brandId: string | null }) {
@@ -130,10 +155,13 @@ export async function AnalyticsDashboard({ brandId }: { brandId: string | null }
               {top.map((row) => (
                 <tr key={row.name} className="border-t border-neutral-100">
                   <td className="px-4 py-2">
-                    {row.name} {row.name_ru && <span className="text-neutral-400">· {row.name_ru}</span>}
+                    {row.name}{" "}
+                    {row.nameRu && <span className="text-neutral-400">· {row.nameRu}</span>}
                   </td>
-                  <td className="px-4 py-2 uppercase text-xs text-neutral-500">{row.category ?? "—"}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{row.match_count}</td>
+                  <td className="px-4 py-2 uppercase text-xs text-neutral-500">
+                    {row.category ?? "—"}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{row.matchCount}</td>
                 </tr>
               ))}
               {top.length === 0 && (

@@ -1,13 +1,16 @@
 import { redirect } from "next/navigation";
-import { randomBytes } from "node:crypto";
-import path from "node:path";
-import { promises as fs } from "node:fs";
 
-import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
+import { saveBrandLogo } from "@/lib/storage";
 import { BrandFormFields } from "../BrandFormFields";
 
 export const dynamic = "force-dynamic";
+
+function randomHex(bytes: number): string {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 async function createBrand(formData: FormData) {
   "use server";
@@ -18,13 +21,10 @@ async function createBrand(formData: FormData) {
   let logoPath: string | null = null;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
-    const dir = path.join(appConfig.dataDir, "logos");
-    await fs.mkdir(dir, { recursive: true });
-    const ext = (logo.name.split(".").pop() || "png").toLowerCase();
-    const filename = `${id}-${Date.now()}.${ext}`;
-    const buffer = Buffer.from(await logo.arrayBuffer());
-    await fs.writeFile(path.join(dir, filename), buffer);
-    logoPath = `logos/${filename}`;
+    const ext = logo.name.split(".").pop() || "png";
+    const buffer = await logo.arrayBuffer();
+    const saved = await saveBrandLogo(buffer, id, ext);
+    logoPath = saved.relativePath;
   }
 
   const s = (key: string): string | null => {
@@ -53,7 +53,7 @@ async function createBrand(formData: FormData) {
     promoCode: s("promoCode"),
     promoTextUz: s("promoTextUz"),
     promoTextRu: s("promoTextRu"),
-    analyticsToken: randomBytes(24).toString("hex"),
+    analyticsToken: randomHex(24),
     active: true,
   });
 

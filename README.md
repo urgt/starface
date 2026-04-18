@@ -2,102 +2,77 @@
 
 B2B SaaS white-label платформа для киоск-развлечения «на кого ты похож из знаменитостей». Клиент-бренд получает URL, посетитель показывает ✌️ — получает результат с брендированным QR-кодом.
 
-## Стек
+## Архитектура
 
-- **Web** (`apps/web`): Next.js 15 (App Router, TS), Tailwind, Drizzle ORM, MediaPipe Tasks Web
-- **ML** (`apps/ml`): FastAPI + InsightFace (ArcFace r50 `buffalo_l`)
-- **БД**: PostgreSQL 16 + pgvector (HNSW) + Redis
-- **Хранилище**: локальная ФС `./data` (в проде — S3-совместимое)
+- **Prod (Cloudflare free tier)** — Pages (`@opennextjs/cloudflare`) + D1 + Vectorize (512-D cosine) + R2 + Cron Triggers. Никаких серверных ML-сервисов. В киоске лицо детектится (MediaPipe) и эмбеддится (MobileFaceNet ONNX через `onnxruntime-web`) прямо в браузере — на бэкенд уходит готовый 512-D вектор.
+- **Seed/enroll (локально, на машине оператора)** — `@starface/scripts`: качает фото с Wikidata, гоняет их через ту же MobileFaceNet ONNX + YuNet-детектор, батчами шлёт на `POST /api/admin/enroll` прода. Описания (UZ/RU/EN) генерируются локальным Ollama / LM Studio и `PATCH`атся в D1.
+- **Legacy dev-стек (`docker-compose.yml`, `apps/ml/`)** — Docker-based Postgres+pgvector+FastAPI+InsightFace. Оставлен на случай если оператору удобнее enroll-ить через Python; в прод НЕ деплоится.
 
-## Запуск одной командой
+## Репозиторий
+
+```
+apps/web/        — Next.js 15 (kiosk, admin, /api/*). Drizzle → D1
+scripts/         — локальные seed-инструменты (enroll, descriptions, fetch-wikidata)
+docker/          — legacy dev-стек (Postgres/pgvector)
+apps/ml/         — legacy FastAPI+InsightFace (не в проде)
+```
+
+## Prod deploy (Cloudflare)
+
+```bash
+# 1. bindings
+wrangler d1 create starface            # id → apps/web/wrangler.toml
+wrangler vectorize create faces --dimensions=512 --metric=cosine
+wrangler r2 bucket create starface-storage
+
+# 2. secrets
+cd apps/web
+wrangler secret put ADMIN_USER
+wrangler secret put ADMIN_PASSWORD
+wrangler secret put CRON_SHARED_SECRET
+wrangler secret put BRAND_ANALYTICS_TOKEN_SALT
+
+# 3. schema + model asset
+pnpm --filter @starface/web db:migrate:remote
+wrangler r2 object put starface-storage/models/mobilefacenet.onnx --file=./models/mobilefacenet.onnx
+
+# 4. ship
+pnpm --filter @starface/web deploy
+```
+
+## Seed (на локальной машине оператора)
+
+```bash
+cd scripts
+pnpm install
+cp .env.example .env.local   # PROD_URL, ADMIN_PASSWORD, LM_*
+mkdir -p models && curl -L -o models/yunet.onnx \
+  https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+# и положить mobilefacenet.onnx рядом
+
+pnpm fetch-wikidata --category uz --limit 50
+pnpm enroll --category uz --dry-run
+pnpm enroll --category uz
+pnpm descriptions --limit 20
+```
+
+Подробнее — `scripts/README.md`.
+
+## Dev (legacy Docker-стек)
+
+Только если нужно поднять Postgres+InsightFace локально для dev. В проде не используется.
 
 ```bash
 docker compose up --build
+open http://localhost:3000/kiosk?brand=demo
 ```
-
-Compose поднимет:
-- `postgres` (pgvector) и `redis` с healthcheck'ами
-- `migrate` — one-shot, применяет схему + сидит демо-бренд `demo`
-- `ml` — FastAPI+InsightFace (при первом запуске скачает ~300 МБ весов)
-- `web` — Next.js с уже установленными зависимостями
-
-После старта:
-- Главная: <http://localhost:3000>
-- Киоск (готов к использованию): <http://localhost:3000/kiosk?brand=demo>
-- Админка: <http://localhost:3000/admin> (логин/пароль `admin` / `change-me` — поменяйте в `.env`)
-- ML health: <http://localhost:8000/ml/health>
-- Web health: <http://localhost:3000/api/health>
-
-Переменные окружения (опционально) — в `.env` (см. `.env.example`).
-
-> Первый `up --build` занимает ~3-5 мин (образы + `pnpm install`). Первый запрос `/api/match` ждёт загрузки ArcFace (~1-2 мин после старта ML).
-
-## Первые шаги
-
-1. Открыть `/kiosk?brand=demo` — демо-бренд уже создан миграцией
-2. **Загрузить базу знаменитостей** (1 команда, ~15-30 мин):
-
-   ```bash
-   ./scripts/seed.sh
-   # или только определённая категория:
-   ./scripts/seed.sh --category uz     # ~300 узбекских
-   ./scripts/seed.sh --category cis    # ~700 СНГ
-   ./scripts/seed.sh --category world  # ~1500 мировых
-   ```
-
-   Скрипт внутри контейнера `ml`:
-   - Запрашивает Wikidata SPARQL по категориям (актёры, музыканты, футболисты)
-   - Скачивает портреты с Wikimedia Commons в `data/seeds/wikidata/photos/`
-   - Прогоняет их через ArcFace и пишет в Postgres (пропускает фото без лица или с несколькими лицами)
-   - Идемпотентен — повторный запуск докачивает/добавляет новое
-
-3. Показать ✌️ в камеру → reveal → QR → мобильная страница
-
-### Откуда данные
-
-Wikidata SPARQL (`query.wikidata.org`) + изображения с Wikimedia Commons. Лицензии на фото в Commons обычно CC/PD — подходят для коммерческого использования (проверяйте для каждой фотографии при необходимости). Никакие API-ключи не нужны.
-
-## Звук щёлчка затвора
-
-Положите файл `shutter.mp3` в `apps/web/public/shutter.mp3` (любой короткий звук camera shutter).
-Без файла киоск работает, просто без аудиооповещения.
 
 ## Приватность
 
-Жест ✌️ = implicit consent (на киоске есть соответствующая надпись). Фото пользователя хранится 24 ч в `data/users/`, затем автоудаляется (вызов `POST /api/admin/cleanup` из крона). Embedding пользователя **в БД не сохраняется**.
-
-## Запуск без Docker (для разработки)
-
-```bash
-cp .env.example .env
-
-# ML
-cd apps/ml
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-
-# БД — применить миграции + сид
-psql "$DATABASE_URL" -f docker/migrate-and-seed.sql
-
-# Web (в другом терминале)
-pnpm install
-pnpm --filter @starface/web dev
-```
+Жест ✌️ = implicit consent. Фото пользователя хранится 24 ч в R2 `users/`, затем удаляется Cron Trigger'ом (`/api/cron/cleanup` каждые 6 часов). Embedding пользователя в БД **не сохраняется** — только top-N-ближайший celebrity + ссылка на фото.
 
 ## Верификация
 
-- `curl http://localhost:8000/ml/health` → `{"status":"ok","model":"buffalo_l"}`
-- `curl http://localhost:3000/api/health` → все чеки `ok`
-- `psql ... -c "SELECT count(*) FROM celebrities;"` — счётчик знаменитостей
-- `/admin` → графики аналитики после тестовых прогонов
-- `/b/<brand>/analytics?t=<token>` — read-only версия для бренда (токен из таблицы `brands.analytics_token`)
-
-## Монорепозиторий
-
-```
-apps/
-  web/   — Next.js (kiosk, mobile result, admin)
-  ml/    — FastAPI ML service + enroll CLI
-data/    — загруженные фото (gitignored)
-```
+- `curl $PROD/api/health` → `{"db":{"ok":true}}`
+- Админка: `$PROD/admin` (Basic Auth `ADMIN_USER` / `ADMIN_PASSWORD`)
+- Аналитика бренда: `$PROD/b/<brandId>/analytics?t=<token>` (токен в `brands.analytics_token`)

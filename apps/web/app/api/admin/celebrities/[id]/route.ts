@@ -1,20 +1,12 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { asc, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db, schema } from "@/lib/db";
-import { deleteStoredFile } from "@/lib/storage";
+import { deleteStoredFile, stripNullMeta } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
-
-type PhotoRow = {
-  id: string;
-  photo_path: string;
-  is_primary: boolean;
-  face_quality: string | null;
-  det_score: number | null;
-  created_at: Date | null;
-};
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,12 +17,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .limit(1);
   if (!celeb) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const photos = await db.execute<PhotoRow>(sql`
-    SELECT id, photo_path, is_primary, face_quality, det_score, created_at
-      FROM celebrity_photos
-      WHERE celebrity_id = ${id}
-      ORDER BY is_primary DESC, created_at ASC
-  `);
+  const photos = await db
+    .select({
+      id: schema.celebrityPhotos.id,
+      photoPath: schema.celebrityPhotos.photoPath,
+      isPrimary: schema.celebrityPhotos.isPrimary,
+      faceQuality: schema.celebrityPhotos.faceQuality,
+      detScore: schema.celebrityPhotos.detScore,
+      createdAt: schema.celebrityPhotos.createdAt,
+    })
+    .from(schema.celebrityPhotos)
+    .where(eq(schema.celebrityPhotos.celebrityId, id))
+    .orderBy(desc(schema.celebrityPhotos.isPrimary), asc(schema.celebrityPhotos.createdAt));
 
   return NextResponse.json({
     id: celeb.id,
@@ -45,12 +43,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     createdAt: celeb.createdAt,
     photos: photos.map((p) => ({
       id: p.id,
-      photoUrl: `/api/files/${p.photo_path}`,
-      photoPath: p.photo_path,
-      isPrimary: p.is_primary,
-      faceQuality: p.face_quality,
-      detScore: p.det_score,
-      createdAt: p.created_at,
+      photoUrl: `/api/files/${p.photoPath}`,
+      photoPath: p.photoPath,
+      isPrimary: p.isPrimary,
+      faceQuality: p.faceQuality,
+      detScore: p.detScore,
+      createdAt: p.createdAt,
     })),
   });
 }
@@ -72,7 +70,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     body = patchSchema.parse(await req.json());
   } catch (e) {
-    return NextResponse.json({ error: "bad_request", detail: (e as Error).message }, { status: 400 });
+    return NextResponse.json(
+      { error: "bad_request", detail: (e as Error).message },
+      { status: 400 },
+    );
   }
 
   const updates: Record<string, unknown> = {};
@@ -90,16 +91,65 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   await db.update(schema.celebrities).set(updates).where(eq(schema.celebrities.id, id));
+
+  if (body.active !== undefined) {
+    const { env } = getCloudflareContext();
+    const photos = await db
+      .select({
+        id: schema.celebrityPhotos.id,
+        photoPath: schema.celebrityPhotos.photoPath,
+      })
+      .from(schema.celebrityPhotos)
+      .where(eq(schema.celebrityPhotos.celebrityId, id));
+
+    const [celeb] = await db
+      .select({
+        gender: schema.celebrities.gender,
+        age: schema.celebrities.age,
+        popularity: schema.celebrities.popularity,
+      })
+      .from(schema.celebrities)
+      .where(eq(schema.celebrities.id, id))
+      .limit(1);
+
+    if (photos.length && celeb) {
+      const existing = await env.FACES.getByIds(photos.map((p) => p.id));
+      const byId = new Map(existing.map((v) => [v.id, v]));
+      const updated: VectorizeVector[] = [];
+      for (const p of photos) {
+        const v = byId.get(p.id);
+        if (!v?.values) continue;
+        updated.push({
+          id: p.id,
+          values: Array.from(v.values),
+          metadata: stripNullMeta({
+            celebrityId: id,
+            celebrityPhotoId: p.id,
+            photoPath: p.photoPath,
+            gender: celeb.gender,
+            age: celeb.age,
+            popularity: celeb.popularity,
+            active: body.active,
+          }),
+        });
+      }
+      if (updated.length) await env.FACES.upsert(updated);
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const photos = await db.execute<{ photo_path: string }>(sql`
-    SELECT photo_path FROM celebrity_photos WHERE celebrity_id = ${id}
-  `);
+  const photos = await db
+    .select({
+      id: schema.celebrityPhotos.id,
+      photoPath: schema.celebrityPhotos.photoPath,
+    })
+    .from(schema.celebrityPhotos)
+    .where(eq(schema.celebrityPhotos.celebrityId, id));
 
-  // Cascade removes celebrity_photos rows; match_results.celebrity_id becomes NULL.
   const deleted = await db
     .delete(schema.celebrities)
     .where(eq(schema.celebrities.id, id))
@@ -107,8 +157,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   if (deleted.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  for (const p of photos) {
-    await deleteStoredFile(p.photo_path);
+  if (photos.length) {
+    const { env } = getCloudflareContext();
+    await env.FACES.deleteByIds(photos.map((p) => p.id));
+    for (const p of photos) await deleteStoredFile(p.photoPath);
   }
   return NextResponse.json({ ok: true, deletedPhotos: photos.length });
 }

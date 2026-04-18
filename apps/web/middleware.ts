@@ -14,9 +14,14 @@ export function middleware(req: NextRequest) {
   const header = req.headers.get("authorization");
   if (header === expected) return NextResponse.next();
 
+  const isPrefetch =
+    req.headers.get("next-router-prefetch") === "1" ||
+    req.headers.get("purpose") === "prefetch" ||
+    req.headers.get("sec-purpose") === "prefetch";
+
   return new NextResponse("Authentication required", {
     status: 401,
-    headers: { "WWW-Authenticate": REALM },
+    headers: isPrefetch ? {} : { "WWW-Authenticate": REALM },
   });
 }
 

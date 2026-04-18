@@ -1,0 +1,5 @@
+node_modules/
+models/
+seeds/
+.env.local
+.seed-progress.json

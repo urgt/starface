@@ -15,7 +15,11 @@ export default function HomePage() {
           >
             Open demo kiosk
           </Link>
-          <Link href="/admin" className="rounded-lg border border-neutral-700 px-5 py-2.5">
+          <Link
+            href="/admin"
+            prefetch={false}
+            className="rounded-lg border border-neutral-700 px-5 py-2.5"
+          >
             Admin
           </Link>
         </div>

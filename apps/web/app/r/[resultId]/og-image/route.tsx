@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { appConfig } from "@/lib/config";
 import { db, schema } from "@/lib/db";
@@ -10,56 +10,48 @@ export const dynamic = "force-dynamic";
 
 const SIZE = { width: 1200, height: 630 } as const;
 
-/**
- * Server-rendered composite image used as `og:image` on the share page.
- * Two portraits side-by-side, the similarity % under them, and a brand-tinted
- * gradient backdrop. Next.js renders this through @vercel/satori so only inline
- * styles + plain <img> tags work — no Tailwind.
- */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ resultId: string }> },
 ) {
   const { resultId } = await params;
 
-  const rows = await db.execute<{
-    similarity: number;
-    user_photo_path: string;
-    brand_id: string | null;
-    celebrity_name: string | null;
-    celebrity_name_ru: string | null;
-    celebrity_photo_path: string | null;
-  }>(sql`
-    SELECT m.similarity, m.user_photo_path, m.brand_id,
-           c.name AS celebrity_name,
-           c.name_ru AS celebrity_name_ru,
-           cp.photo_path AS celebrity_photo_path
-      FROM match_results m
-      LEFT JOIN celebrities c ON c.id = m.celebrity_id
-      LEFT JOIN celebrity_photos cp ON cp.id = m.celebrity_photo_id
-      WHERE m.id = ${resultId}
-      LIMIT 1
-  `);
-  const row = rows[0];
+  const [row] = await db
+    .select({
+      similarity: schema.matchResults.similarity,
+      userPhotoPath: schema.matchResults.userPhotoPath,
+      brandId: schema.matchResults.brandId,
+      celebrityName: schema.celebrities.name,
+      celebrityNameRu: schema.celebrities.nameRu,
+      celebrityPhotoPath: schema.celebrityPhotos.photoPath,
+    })
+    .from(schema.matchResults)
+    .leftJoin(schema.celebrities, eq(schema.celebrities.id, schema.matchResults.celebrityId))
+    .leftJoin(
+      schema.celebrityPhotos,
+      eq(schema.celebrityPhotos.id, schema.matchResults.celebrityPhotoId),
+    )
+    .where(eq(schema.matchResults.id, resultId))
+    .limit(1);
   if (!row) {
     return new Response("Not found", { status: 404 });
   }
 
   let brand = DEFAULT_BRAND_THEME;
-  if (row.brand_id) {
+  if (row.brandId) {
     const [b] = await db
       .select()
       .from(schema.brands)
-      .where(eq(schema.brands.id, row.brand_id))
+      .where(eq(schema.brands.id, row.brandId))
       .limit(1);
     if (b) brand = brandThemeFromRow(b);
   }
 
-  const userImg = `${appConfig.appUrl}/api/files/${row.user_photo_path}`;
-  const celebImg = row.celebrity_photo_path
-    ? `${appConfig.appUrl}/api/files/${row.celebrity_photo_path}`
+  const userImg = `${appConfig.appUrl}/api/files/${row.userPhotoPath}`;
+  const celebImg = row.celebrityPhotoPath
+    ? `${appConfig.appUrl}/api/files/${row.celebrityPhotoPath}`
     : null;
-  const celebName = row.celebrity_name_ru || row.celebrity_name || "";
+  const celebName = row.celebrityNameRu || row.celebrityName || "";
 
   return new ImageResponse(
     (

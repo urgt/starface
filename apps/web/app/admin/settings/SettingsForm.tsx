@@ -45,7 +45,9 @@ export function SettingsForm({ initial }: { initial: Initial }) {
     setTestResult(null);
     try {
       const res = await fetch("/api/admin/settings/llm/test", { method: "POST" });
-      const data = await res.json();
+      const data = (await res.json()) as
+        | { ok: true; latencyMs: number }
+        | { ok: false; error: string };
       setTestResult(data);
     } catch (e) {
       setTestResult({ ok: false, error: (e as Error).message });

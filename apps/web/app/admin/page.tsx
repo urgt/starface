@@ -1,23 +1,22 @@
-import { count, sql } from "drizzle-orm";
+import { count, desc, gte } from "drizzle-orm";
 
 import { db, schema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHome() {
-  const [[brandCount], [celebCount], [eventCount]] = await Promise.all([
+  const weekAgo = new Date(Date.now() - 7 * 24 * 3600_000);
+  const [[brandCount], [celebCount], [eventCount], recent] = await Promise.all([
     db.select({ c: count() }).from(schema.brands),
     db.select({ c: count() }).from(schema.celebrities),
     db.select({ c: count() }).from(schema.events),
+    db
+      .select({ eventType: schema.events.eventType, c: count() })
+      .from(schema.events)
+      .where(gte(schema.events.createdAt, weekAgo))
+      .groupBy(schema.events.eventType)
+      .orderBy(desc(count())),
   ]);
-
-  const recent = await db.execute<{ event_type: string; c: number }>(sql`
-    SELECT event_type, count(*)::int AS c
-    FROM events
-    WHERE created_at > now() - interval '7 days'
-    GROUP BY event_type
-    ORDER BY c DESC
-  `);
 
   return (
     <div className="space-y-8">
@@ -39,8 +38,8 @@ export default async function AdminHome() {
             </thead>
             <tbody>
               {recent.map((row) => (
-                <tr key={row.event_type} className="border-t border-neutral-100">
-                  <td className="px-4 py-2">{row.event_type}</td>
+                <tr key={row.eventType} className="border-t border-neutral-100">
+                  <td className="px-4 py-2">{row.eventType}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{row.c}</td>
                 </tr>
               ))}

@@ -37,3 +37,11 @@ data/
 
 # drizzle
 apps/web/drizzle/meta/
+
+# cloudflare / opennext
+.open-next/
+.wrangler/
+apps/web/cloudflare-env.d.ts
+
+# typescript build info
+*.tsbuildinfo

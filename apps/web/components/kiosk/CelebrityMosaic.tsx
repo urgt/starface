@@ -16,8 +16,8 @@ export function CelebrityMosaic({ columns = 6, maxItems = 24 }: Props) {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/celebrities/preview")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((data: { items: Item[] }) => {
+      .then((r) => (r.ok ? (r.json() as Promise<{ items: Item[] }>) : Promise.reject(r.status)))
+      .then((data) => {
         if (cancelled) return;
         setItems((data.items ?? []).slice(0, maxItems));
         setLoaded(true);

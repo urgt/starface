@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Locale } from "@/lib/i18n";
 import { brandCssVars, type BrandTheme } from "@/lib/brand-theme";
+import { bitmapFromDataUrl, embedBurst, FaceEmbedError } from "@/lib/face-embed";
 import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { GestureCamera, type GestureCameraHandle } from "./GestureCamera";
 import { IdleScreen } from "./IdleScreen";
@@ -81,10 +82,20 @@ export function KioskApp({ brand, appUrl }: Props) {
 
     setPhase("analyzing");
     try {
+      const bitmaps = await Promise.all(frames.map((f) => bitmapFromDataUrl(f)));
+      const embed = await embedBurst(bitmaps);
+      bitmaps.forEach((b) => b.close());
+
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId: brand.id, imagesBase64: frames }),
+        body: JSON.stringify({
+          brandId: brand.id,
+          embedding: embed.embedding,
+          userPhotoBase64: frames[0],
+          detScore: embed.detScore,
+          faceQuality: embed.faceQuality,
+        }),
         signal: AbortSignal.timeout(25_000),
       });
       if (!res.ok) {
@@ -96,8 +107,13 @@ export function KioskApp({ brand, appUrl }: Props) {
       setPhase("reveal");
     } catch (err) {
       console.warn("match failed", err);
-      const msg = (err as Error).name === "TimeoutError" ? "timeout" : (err as Error).message;
-      setErrorMessage(humanizeError(msg));
+      const code =
+        err instanceof FaceEmbedError
+          ? err.code
+          : (err as Error).name === "TimeoutError"
+            ? "timeout"
+            : (err as Error).message;
+      setErrorMessage(humanizeError(code));
       setPhase("error");
       setTimeout(resetToIdle, 3000);
     }
@@ -176,6 +192,9 @@ function humanizeError(code: string): string {
       return "В кадре несколько лиц. Покажите ✌️ один";
     case "low_quality":
       return "Снимок получился нечётким. Попробуйте ещё раз";
+    case "model_load_failed":
+    case "detector_load_failed":
+      return "Модель не загрузилась. Проверьте соединение";
     case "brand_not_found":
       return "Этот бренд не найден";
     case "no_celebrities":

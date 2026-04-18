@@ -1,63 +1,39 @@
+import { and, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/lib/db";
-import { sql } from "drizzle-orm";
+import { db, schema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Row = {
-  id: string;
-  name: string;
-  name_ru: string | null;
-  photo_path: string;
-  popularity: number;
-};
-
 export async function GET() {
-  const primary = (await db.execute(sql`
-    SELECT c.id::text AS id,
-           c.name,
-           c.name_ru,
-           cp.photo_path,
-           c.popularity
-      FROM celebrities c
-      JOIN celebrity_photos cp
-        ON cp.celebrity_id = c.id
-       AND cp.is_primary = true
-     WHERE c.active = true
-     ORDER BY c.popularity DESC NULLS LAST, random()
-     LIMIT 24
-  `)) as unknown as Row[];
-
-  let rows: Row[] = primary;
-  const maxPopularity = rows.reduce((m, r) => Math.max(m, r.popularity ?? 0), 0);
-
-  if (rows.length < 6 || maxPopularity === 0) {
-    const fallback = (await db.execute(sql`
-      SELECT c.id::text AS id,
-             c.name,
-             c.name_ru,
-             cp.photo_path,
-             c.popularity
-        FROM celebrities c
-        JOIN celebrity_photos cp
-          ON cp.celebrity_id = c.id
-         AND cp.is_primary = true
-       WHERE c.active = true
-       ORDER BY random()
-       LIMIT 24
-    `)) as unknown as Row[];
-    if (fallback.length > rows.length) rows = fallback;
-  }
+  const rows = await db
+    .select({
+      id: schema.celebrities.id,
+      name: schema.celebrities.name,
+      nameRu: schema.celebrities.nameRu,
+      photoPath: schema.celebrityPhotos.photoPath,
+      popularity: schema.celebrities.popularity,
+    })
+    .from(schema.celebrities)
+    .innerJoin(
+      schema.celebrityPhotos,
+      and(
+        eq(schema.celebrityPhotos.celebrityId, schema.celebrities.id),
+        eq(schema.celebrityPhotos.isPrimary, true),
+      ),
+    )
+    .where(eq(schema.celebrities.active, true))
+    .orderBy(desc(schema.celebrities.popularity), sql`random()`)
+    .limit(24);
 
   return NextResponse.json(
     {
       items: rows.map((r) => ({
         id: r.id,
         name: r.name,
-        nameRu: r.name_ru,
-        photoUrl: `/api/files/${r.photo_path}`,
+        nameRu: r.nameRu,
+        photoUrl: `/api/files/${r.photoPath}`,
       })),
     },
     {
