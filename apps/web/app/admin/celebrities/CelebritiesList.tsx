@@ -364,6 +364,54 @@ function EditMode({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  type GenLang = "uz" | "ru" | "en";
+  type GenTarget = "all" | GenLang;
+
+  const [genTarget, setGenTarget] = useState<GenTarget | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genSource, setGenSource] = useState<"wikipedia" | "none" | null>(null);
+
+  async function generate(target: GenTarget) {
+    const languages: GenLang[] | undefined = target === "all" ? undefined : [target];
+    setGenTarget(target);
+    setGenError(null);
+    try {
+      const res = await fetch(`/api/admin/celebrities/${detail.id}/generate-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(languages ? { languages } : {}),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        uz?: string;
+        ru?: string;
+        en?: string;
+        source?: "wikipedia" | "none";
+        error?: string;
+        detail?: string;
+      };
+      if (!res.ok) {
+        setGenError(
+          data.error === "rate_limited"
+            ? "Rate limited, try again in a moment."
+            : data.error === "safety_blocked"
+              ? "Gemini blocked the response (safety filter)."
+              : data.error === "upstream_error"
+                ? "Gemini API error. Try again."
+                : (data.error ?? `HTTP ${res.status}`),
+        );
+        return;
+      }
+      if (data.uz) setDescUz(data.uz);
+      if (data.ru) setDescRu(data.ru);
+      if (data.en) setDescEn(data.en);
+      setGenSource(data.source ?? null);
+    } catch (e) {
+      setGenError((e as Error).message);
+    } finally {
+      setGenTarget(null);
+    }
+  }
+
   async function save() {
     setSaving(true);
     try {
@@ -481,12 +529,54 @@ function EditMode({
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Descriptions
-        </h3>
-        <DescField label="Uzbek" value={descUz} onChange={setDescUz} />
-        <DescField label="Russian" value={descRu} onChange={setDescRu} />
-        <DescField label="English" value={descEn} onChange={setDescEn} />
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
+            Descriptions
+          </h3>
+          <div className="flex items-center gap-2">
+            {genSource && !genError && (
+              <span className="text-xs text-neutral-500">
+                {genSource === "wikipedia"
+                  ? "Generated from Wikipedia"
+                  : "Generated from name only"}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => void generate("all")}
+              disabled={genTarget !== null}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+            >
+              {genTarget === "all" ? "Generating…" : "Generate descriptions"}
+            </button>
+          </div>
+        </div>
+        {genError && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {genError}
+          </p>
+        )}
+        <DescField
+          label="Uzbek"
+          value={descUz}
+          onChange={setDescUz}
+          onRegenerate={() => void generate("uz")}
+          regenerating={genTarget === "uz" || genTarget === "all"}
+        />
+        <DescField
+          label="Russian"
+          value={descRu}
+          onChange={setDescRu}
+          onRegenerate={() => void generate("ru")}
+          regenerating={genTarget === "ru" || genTarget === "all"}
+        />
+        <DescField
+          label="English"
+          value={descEn}
+          onChange={setDescEn}
+          onRegenerate={() => void generate("en")}
+          regenerating={genTarget === "en" || genTarget === "all"}
+        />
       </div>
 
       <div className="border-t border-red-200 pt-4">
@@ -506,19 +596,38 @@ function DescField({
   label,
   value,
   onChange,
+  onRegenerate,
+  regenerating,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onRegenerate?: () => void;
+  regenerating?: boolean;
 }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block font-medium">{label}</span>
+      <span className="mb-1 flex items-center gap-2 font-medium">
+        {label}
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={regenerating}
+            aria-label={`Regenerate ${label} description`}
+            title={`Regenerate ${label}`}
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 text-[10px] text-neutral-600 hover:bg-neutral-100 disabled:opacity-40"
+          >
+            {regenerating ? "…" : "↻"}
+          </button>
+        )}
+      </span>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={3}
-        className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+        disabled={regenerating}
+        className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
       />
     </label>
   );
