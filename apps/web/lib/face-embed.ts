@@ -83,7 +83,7 @@ async function getSession(): Promise<ort.InferenceSession> {
       try {
         const buffer = await fetchModelBuffer();
         return await ort.InferenceSession.create(buffer, {
-          executionProviders: ["webgpu", "webgl", "wasm"],
+          executionProviders: ["wasm"],
           graphOptimizationLevel: "all",
         });
       } catch (e) {
