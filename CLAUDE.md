@@ -108,7 +108,7 @@ All file IO goes through R2 via `apps/web/lib/storage.ts` (`saveUserPhoto`, `sav
 
 Two config surfaces:
 
-1. **Prod (`apps/web/wrangler.toml` `[vars]` + `wrangler secret put`)** — `MATCH_MIN_COSINE`, `DISPLAY_MIN_PCT`, `DISPLAY_MAX_PCT`, `USER_PHOTO_TTL_HOURS`, `NEXT_PUBLIC_APP_URL` as vars; `ADMIN_USER`, `ADMIN_PASSWORD`, `CRON_SHARED_SECRET`, `BRAND_ANALYTICS_TOKEN_SALT` as secrets. Match-tuning knobs are read at request time in `lib/config.ts` — no rebuild needed to change them, but a redeploy is needed to pick up new `[vars]`.
+1. **Prod (`apps/web/wrangler.toml` `[vars]` + `wrangler secret put`)** — `MATCH_MIN_COSINE`, `DISPLAY_MIN_PCT`, `DISPLAY_MAX_PCT`, `USER_PHOTO_TTL_HOURS`, `NEXT_PUBLIC_APP_URL`, `GEMINI_MODEL` as vars; `ADMIN_USER`, `ADMIN_PASSWORD`, `CRON_SHARED_SECRET`, `BRAND_ANALYTICS_TOKEN_SALT`, `GEMINI_API_KEY` as secrets. Match-tuning knobs are read at request time in `lib/config.ts` — no rebuild needed to change them, but a redeploy is needed to pick up new `[vars]`.
 2. **Local seed scripts (`scripts/.env.example` / `scripts/.env.local`)** — `PROD_URL`, `ADMIN_USER`, `ADMIN_PASSWORD`, `LM_BASE_URL`, `LM_API_KEY`, `LM_MODEL`, `FACENET_MODEL_PATH`, `YUNET_MODEL_PATH`, `SEED_OUT_DIR`.
 
 ## Hard rules
