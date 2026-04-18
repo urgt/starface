@@ -15,5 +15,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   headers.set("cache-control", "public, max-age=86400");
   headers.set("etag", obj.httpEtag);
 
-  return new Response(obj.body, { headers });
+  const buffer = await obj.arrayBuffer();
+  return new Response(buffer, { headers });
 }
