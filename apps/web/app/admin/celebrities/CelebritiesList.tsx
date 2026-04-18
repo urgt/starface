@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { detectAndEmbed, FaceEmbedError } from "@/lib/face-embed";
@@ -28,63 +28,17 @@ export type CelebrityRow = {
   photoCount: number;
 };
 
-const CATEGORIES = ["all", "uz", "cis", "world"] as const;
-type Category = (typeof CATEGORIES)[number];
-
 export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CelebrityRow | null>(null);
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<Category>("all");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return celebrities.filter((c) => {
-      if (category !== "all" && (c.category ?? "") !== category) return false;
-      if (!q) return true;
-      return (
-        c.name.toLowerCase().includes(q) ||
-        (c.nameRu ?? "").toLowerCase().includes(q) ||
-        (c.descriptionUz ?? "").toLowerCase().includes(q) ||
-        (c.descriptionRu ?? "").toLowerCase().includes(q) ||
-        (c.descriptionEn ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [celebrities, query, category]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name or description..."
-          className="min-w-[260px] flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
-        />
-        <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-1 text-sm">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={
-                "rounded-md px-3 py-1 font-medium capitalize transition-colors " +
-                (category === c
-                  ? "bg-neutral-900 text-white"
-                  : "text-neutral-600 hover:text-neutral-900")
-              }
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {filtered.map((c) => (
+        {celebrities.map((c) => (
           <CelebrityCard key={c.id} celeb={c} onOpen={() => setSelected(c)} />
         ))}
-        {filtered.length === 0 && (
+        {celebrities.length === 0 && (
           <p className="col-span-full rounded-xl border border-dashed border-neutral-300 p-8 text-center text-neutral-400">
             Nothing matches the filter.
           </p>
