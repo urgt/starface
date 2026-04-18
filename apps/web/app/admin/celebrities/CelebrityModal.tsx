@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { EditMode } from "./EditMode";
@@ -56,15 +57,23 @@ export function CelebrityModal({
         className="relative max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={onClose}
-          aria-label="close"
-          className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-2 text-white hover:bg-black"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <Link
+            href={`/admin/celebrities/${celebrityId}`}
+            className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+          >
+            Open full page
+          </Link>
+          <button
+            onClick={onClose}
+            aria-label="close"
+            className="rounded-full bg-black/70 p-2 text-white hover:bg-black"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
 
         <div className="max-h-[94vh] overflow-y-auto p-6">
           {loading && <p className="text-neutral-500">Loading…</p>}
