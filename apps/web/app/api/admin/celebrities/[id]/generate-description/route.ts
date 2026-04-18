@@ -94,10 +94,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let result: Awaited<ReturnType<typeof generateDescriptions>> | null = null;
   let errorCode: string | null = null;
 
+  let errorDetail: string | null = null;
   try {
     result = await generateDescriptions({ apiKey, model, prompt, languages });
   } catch (e) {
-    errorCode = e instanceof GeminiError ? e.code : "internal";
+    if (e instanceof GeminiError) {
+      errorCode = e.code;
+      errorDetail = e.detail;
+    } else {
+      errorCode = "internal";
+      errorDetail = (e as Error).message ?? null;
+    }
+    console.error("generate-description failed", {
+      celebrityId: celeb.id,
+      errorCode,
+      errorDetail,
+      model,
+    });
   }
 
   const latencyMs = Date.now() - start;
@@ -121,19 +134,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
 
   if (!success || !result) {
+    const detail = errorDetail ?? undefined;
     if (errorCode === "rate_limited") {
-      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+      return NextResponse.json({ error: "rate_limited", detail }, { status: 429 });
     }
     if (errorCode === "safety_blocked") {
-      return NextResponse.json({ error: "safety_blocked" }, { status: 422 });
+      return NextResponse.json({ error: "safety_blocked", detail }, { status: 422 });
     }
     if (errorCode === "parse_error") {
-      return NextResponse.json(
-        { error: "internal", detail: "parse_error" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "internal", detail: detail ?? "parse_error" }, { status: 500 });
     }
-    return NextResponse.json({ error: "upstream_error" }, { status: 502 });
+    return NextResponse.json({ error: "upstream_error", detail }, { status: 502 });
   }
 
   const missing = languages.filter((l) => !result.descriptions[l]);
