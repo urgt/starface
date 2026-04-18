@@ -14,7 +14,7 @@ DISPLAY_MIN_PCT = "60"
 DISPLAY_MAX_PCT = "97"
 USER_PHOTO_TTL_HOURS = "24"
 NEXT_PUBLIC_APP_URL = "https://starface.pages.dev"
-GEMINI_MODEL = "gemini-3.1-flash-lite"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 [[d1_databases]]
 binding = "DB"
