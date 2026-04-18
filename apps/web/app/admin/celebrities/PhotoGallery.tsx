@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { detectAndEmbed, FaceEmbedError } from "@/lib/face-embed";
+import { FindPhotosModal } from "./FindPhotosModal";
 import type { CelebrityDetail } from "./types";
 import { fileToBitmap, readFileAsBase64 } from "./upload-helpers";
 
@@ -22,6 +23,7 @@ export function PhotoGallery({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadLog, setUploadLog] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
 
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -139,6 +141,13 @@ export function PhotoGallery({
               className="hidden"
             />
             <button
+              onClick={() => setFindOpen(true)}
+              disabled={uploading}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+            >
+              Find more photos
+            </button>
+            <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
               className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
@@ -191,6 +200,13 @@ export function PhotoGallery({
         <pre className="max-h-40 overflow-auto rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700">
           {uploadLog.join("\n")}
         </pre>
+      )}
+      {findOpen && (
+        <FindPhotosModal
+          celebrityId={celebrityId}
+          onClose={() => setFindOpen(false)}
+          onImported={onChanged}
+        />
       )}
     </div>
   );
