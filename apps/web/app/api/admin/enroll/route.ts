@@ -50,6 +50,12 @@ type EnrollResult = {
   inserted: number;
   updated: number;
   failed: Array<{ externalId: string | null; name: string; reason: string }>;
+  ids: Array<{
+    externalId: string | null;
+    name: string;
+    celebrityId: string;
+    action: "inserted" | "updated";
+  }>;
 };
 
 function base64ToUint8Array(input: string): Uint8Array {
@@ -72,7 +78,7 @@ export async function POST(req: Request) {
   }
 
   const { env } = getCloudflareContext();
-  const result: EnrollResult = { inserted: 0, updated: 0, failed: [] };
+  const result: EnrollResult = { inserted: 0, updated: 0, failed: [], ids: [] };
 
   const externalIds = payload.celebrities
     .map((c) => c.externalId)
@@ -104,6 +110,7 @@ export async function POST(req: Request) {
         : byName.get(input.name) ?? null;
 
       let celebrityId: string;
+      let action: "inserted" | "updated";
       if (existingId) {
         celebrityId = existingId;
         await db
@@ -123,6 +130,7 @@ export async function POST(req: Request) {
           })
           .where(eq(schema.celebrities.id, celebrityId));
         result.updated += 1;
+        action = "updated";
       } else {
         const [row] = await db
           .insert(schema.celebrities)
@@ -142,7 +150,14 @@ export async function POST(req: Request) {
           .returning({ id: schema.celebrities.id });
         celebrityId = row.id;
         result.inserted += 1;
+        action = "inserted";
       }
+      result.ids.push({
+        externalId: input.externalId ?? null,
+        name: input.name,
+        celebrityId,
+        action,
+      });
 
       const hasPrimaryRows = await db
         .select({ id: schema.celebrityPhotos.id })
