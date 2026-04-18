@@ -72,10 +72,6 @@ export default async function CelebritiesListPage() {
           + Enroll celebrity
         </Link>
       </div>
-      <p className="text-sm text-neutral-500">
-        Use the local seed CLI (<code>pnpm tsx scripts/seed/enroll.ts</code>) for bulk loads; this
-        UI is for inspection and per-celebrity photo tweaks only.
-      </p>
       <CelebritiesList celebrities={celebrities} />
     </div>
   );
