@@ -80,8 +80,10 @@ New:
   `generateDescriptions(input, env)` returning `{ uz?, ru?, en? }`. Handles
   endpoint, auth (?key=...), schema injection, retry, Zod parse.
 - `apps/web/lib/llm/prompts.ts` — `buildDescriptionPrompt(celeb, wikiContext, languages)`.
-- `apps/web/lib/llm/schema.ts` — Zod schema for the structured response. Exported
-  for both the route and the test(s).
+- `apps/web/lib/llm/schema.ts` — Zod schema for the structured response.
+  Exported for the route. Every language field is `z.string().min(1)`: empty
+  strings in the Gemini response are treated as a generation failure, not
+  pasted into the textarea.
 - `apps/web/lib/wikipedia.ts` — `fetchSummaries(wikidataId, langs)`, thin wrapper
   around `https://{lang}.wikipedia.org/api/rest_v1/page/summary/{title}` with a
   small Wikidata → title lookup via `https://www.wikidata.org/wiki/Special:EntityData/{id}.json`.
@@ -94,8 +96,10 @@ Modified (minimally):
   descriptions" button in the description block of `EditMode`, plus a small "↻"
   per-language button next to each textarea label. No structural split of the
   file in this sub-project (gap #5 is tracked separately in phase A).
-- `apps/web/wrangler.toml` — add `GEMINI_MODEL = "gemini-3-flash-lite"` under
-  `[vars]`. Document `GEMINI_API_KEY` secret.
+- `apps/web/wrangler.toml` — add `GEMINI_MODEL = "gemini-2.5-flash-lite"` under
+  `[vars]` as a conservative default; the canonical 2026 ID is confirmed at
+  plan time (§12 item 1) and the default is bumped then. Document the
+  `GEMINI_API_KEY` secret in the same commit.
 - `apps/web/cloudflare-env.d.ts` — regenerated via `cf-typegen`.
 - `CLAUDE.md` — short note in config reference about the new secret + var.
 
@@ -154,7 +158,7 @@ The JSON body of every error is `{ error: string, detail?: string, ... }`.
 
 ### 5.1 Model
 
-`GEMINI_MODEL = "gemini-3-flash-lite"` by default. Research to confirm the exact canonical model ID (`gemini-3-flash-lite` vs `gemini-3-1-flash-lite` vs `gemini-2.5-flash-lite`) is a **plan-time task** — see §12 open items. Whichever is current, we target the Flash-Lite tier for cost.
+Default `GEMINI_MODEL = "gemini-2.5-flash-lite"`. This is used as a conservative placeholder that is known to exist; the canonical 2026 Flash-Lite ID (`gemini-3-flash-lite` / `gemini-3-1-flash-lite` / other) is confirmed at plan time (§12 item 1) and the default bumped in the same commit that wires up the route. We always target the Flash-Lite tier for cost.
 
 Pricing benchmark (approximate): ~500 input + ~300 output tokens per call → well under a cent. 1000 celebrities ≈ under $1 at Flash-Lite rates. Cost is a non-issue for the foreseeable dataset size.
 
@@ -163,10 +167,13 @@ Pricing benchmark (approximate): ~500 input + ~300 output tokens per call → we
 Native REST, not the OpenAI-compatibility shim:
 
 ```
-POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}
+POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+Headers:
+  x-goog-api-key: <GEMINI_API_KEY>
+  Content-Type: application/json
 ```
 
-Auth: API key in query string. Worker reads `env.GEMINI_API_KEY`.
+The API key goes in the `x-goog-api-key` header, **not** the query string. Cloudflare logs full request URLs in access logs; putting the key in the header keeps it out of logs, worker traces, and any third-party observability that samples URLs.
 
 ### 5.3 Request shape
 
@@ -211,18 +218,9 @@ Gender: {gender ?? "—"}
 Age (approx): {age ?? "—"}
 
 {if wikipedia}
-Reference excerpt (English Wikipedia):
-"""
-{enWiki}
-"""
-Reference excerpt (Russian Wikipedia):
-"""
-{ruWiki}
-"""
-Reference excerpt (Uzbek Wikipedia):
-"""
-{uzWiki}
-"""
+<excerpt lang="en">{enWiki}</excerpt>
+<excerpt lang="ru">{ruWiki}</excerpt>
+<excerpt lang="uz">{uzWiki}</excerpt>
 {endif}
 
 Return a JSON object with fields uz, ru, en. Each value is 2–3 sentences in
@@ -230,14 +228,22 @@ that language. For the Uzbek field, use standard Latin-script Uzbek (not
 Cyrillic).
 ```
 
+XML-style `<excerpt>` delimiters are deliberate, not prose: tripled quotes are a
+plausible substring of Wikipedia text and would open a prompt-injection vector.
+Before injecting an excerpt, strip any literal `</excerpt>` substring and
+truncate the text to **800 characters** (see §6.1). Strip nothing else —
+Wikipedia text is otherwise trusted.
+
 Prompt lives in `apps/web/lib/llm/prompts.ts` as a pure function. Any tweak is
 a one-line change.
 
 ### 5.5 Retry policy
 
-- One retry on HTTP 429 or 5xx, with a 1500 ms delay (doubled if `Retry-After` header suggests more).
+- One retry on HTTP 429 or 5xx, with a 1500 ms delay (raised to `Retry-After` if the upstream supplies a larger value).
 - No retry on 4xx other than 429.
 - If the second attempt also fails, surface the error to the operator via §4.3 — do not silently swallow.
+
+The delay is implemented as `await new Promise((r) => setTimeout(r, ms))`. In the Workers runtime with `nodejs_compat`, `setTimeout` is scheduled against wall clock, not CPU time. Do not busy-wait.
 
 ### 5.6 Safety
 
@@ -249,24 +255,43 @@ Use Gemini's defaults. If, in practice, biographies start getting blocked (unlik
 
 Given `wikidataId` like `Q12345`:
 
-1. Fetch `https://www.wikidata.org/wiki/Special:EntityData/Q12345.json`.
+1. Fetch
+   `https://www.wikidata.org/wiki/Special:EntityData/Q12345.json?props=sitelinks`.
+   The `?props=sitelinks` narrowing is required — unfiltered entity JSON for a
+   well-linked public figure is commonly 1–3 MB, which wastes subrequest budget
+   and memory. With `props=sitelinks` the response is typically < 20 KB.
 2. From the `sitelinks` map, read `enwiki.title`, `ruwiki.title`, `uzwiki.title`.
 3. For each available sitelink **whose language is in `languages`**, fetch
    `https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encodedTitle}`.
-4. Extract `.extract` (the intro paragraph). Truncate to 800 characters.
+4. Extract `.extract` (the intro paragraph). Strip any literal `</excerpt>` and
+   truncate to **800 characters** before passing to the prompt builder.
 
-Wikidata + Wikipedia calls run in parallel (single `Promise.all`). Timeouts: 4 seconds each. A failure on any language is logged and skipped — the prompt simply omits that reference block.
+Wikidata + Wikipedia calls run in parallel (single `Promise.all`). Per-request
+timeout: 4 seconds, implemented with `AbortController`. A failure on any
+language is logged and skipped — the prompt simply omits that reference block.
+The worst case is 5 outbound calls per generation (1 Wikidata + 3 Wikipedia +
+1 Gemini), comfortably within the Workers paid-plan 1000-subrequest budget.
 
-If no `wikidataId`, we skip the whole step. Prompt contains no Wikipedia section. `source: "none"` is returned.
+If no `wikidataId`, we skip the whole step. Prompt contains no Wikipedia
+section. `source: "none"` is returned.
 
 ### 6.2 Regenerate vs first-time
 
-If the celebrity already has a description in language L and the operator clicks the per-field "↻" for L, we:
+If the celebrity already has a description in language L and the operator
+clicks the per-field "↻" for L, we:
 
 - Still fetch Wikipedia (same as first-time).
-- Append to the prompt: `Improve the following existing text rather than replace it with unrelated content. Do not invent facts. Existing {L} text: "..."`.
+- Append to the prompt:
+  `Improve the following existing text rather than replace it with unrelated
+  content. Do not invent facts. Existing {L} text: <existing>...</existing>`.
 
-This softly biases regeneration toward refinement, not wholesale rewrite. It does NOT prevent rewrite — the operator can always accept or discard.
+The existing text is truncated to **500 characters** before injection (the
+stored maximum is 2000, but longer existing texts bloat the prompt and rarely
+add information beyond the opening sentences). Same `</existing>` stripping
+rule as §5.4 for the excerpt delimiter.
+
+This softly biases regeneration toward refinement, not wholesale rewrite. It
+does NOT prevent rewrite — the operator can always accept or discard.
 
 ## 7. UX
 
@@ -281,7 +306,16 @@ In `EditMode`, the description block shows:
 
 - Idle: buttons active.
 - Generating: buttons disabled, button text becomes "Generating…", textareas locked while request is in flight.
-- Success: the returned fields replace textarea contents. Cursor does not jump. A small inline toast `Generated from Wikipedia` or `Generated from name only` fades for 3 s.
+- Success: the returned fields replace textarea contents. A small inline toast
+  `Generated from Wikipedia` or `Generated from name only` fades for 3 s.
+
+  Implementation note: a naive `setState(newText)` on a controlled textarea
+  causes the caret to jump to the end on every keystroke during subsequent
+  edits. The generated-text paste must preserve caret-at-end (that is the
+  correct behavior on fresh content) while normal typing keeps React's default
+  controlled behavior. In practice this means: flip a one-shot flag when
+  assigning generated content, and trust React's default otherwise. No
+  `useRef` into the DOM node is required.
 - Error: textareas remain unchanged. Red inline message under the button with the error from §4.3. The button is re-enabled.
 
 ### 7.3 Save
@@ -290,26 +324,38 @@ No change to save logic. The existing PATCH flow persists whatever is in the tex
 
 ## 8. Observability
 
-Every call appends to `events`:
+Every call appends to `events`. Exact insert shape (reminder: `brandId` and
+`resultId` are both nullable on this table and are explicitly null here —
+this event is not tied to a brand or match result):
 
 ```ts
-{
+await db.insert(schema.events).values({
+  brandId: null,
+  resultId: null,
   eventType: "admin.description_generated",
   metadata: {
     celebrityId,
-    model,
-    languages: ["uz", "ru", "en"],
+    model,                         // echoed from env.GEMINI_MODEL
+    languages,                     // ["uz","ru","en"] subset
     latencyMs,
-    inputTokens,
-    outputTokens,
-    source: "wikipedia" | "none",
-    success: boolean,
-    errorCode?: string
-  }
-}
+    inputTokens,                   // from usageMetadata.promptTokenCount
+    outputTokens,                  // from usageMetadata.candidatesTokenCount
+    source,                        // "wikipedia" | "none"
+    success,                       // boolean
+    errorCode,                     // optional, §4.3 code on failure
+  },
+});
 ```
 
-This feeds into the existing admin dashboard and gives us "N descriptions generated this week", "average latency", and rough cost estimates without any new infra.
+Event is written **after** the Gemini call returns (or fails) — success and
+failure both get rows so we can see overall success rate. If the route itself
+throws before reaching the call, no event is written (same semantics as other
+admin routes — there is nothing to log).
+
+This feeds into the existing admin dashboard and gives us "N descriptions
+generated this week", "average latency", and rough cost estimates without any
+new infra. Generated text itself is **not** stored in the event metadata, so
+this log is safe to retain indefinitely.
 
 ## 9. Testing
 
@@ -337,9 +383,15 @@ Manual validation checklist, to be executed against prod before marking done:
 
 ## 11. Cost / capacity
 
-Per-generation cost on Flash-Lite: sub-cent. Paid-tier rate limits (Tier 1 ≈ 150 RPM based on current public docs — to be confirmed at plan time) far exceed what a single operator will ever hit manually. We do not need client-side throttling for MVP.
+Per-generation cost on Flash-Lite: sub-cent. Paid-tier rate limits comfortably
+exceed what a single operator can hit manually, so no client-side throttling
+is implemented in the MVP. Exact RPM/TPM numbers are confirmed at plan time
+(§12 item 2); if they turn out to be lower than expected, that item upgrades
+to "add sliding-window limiter".
 
-If future sub-project D (bulk import) triggers generation for 500+ celebs at once, that caller is responsible for its own rate management (e.g., serial calls or batch-mode endpoint). This route stays simple.
+If future sub-project D (bulk import) triggers generation for 500+ celebs at
+once, that caller is responsible for its own rate management (e.g., serial
+calls or batch-mode endpoint). This route stays simple.
 
 ## 12. Open items to resolve at plan time
 
