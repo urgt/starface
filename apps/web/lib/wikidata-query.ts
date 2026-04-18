@@ -9,6 +9,7 @@ export type RawCandidate = {
   dob: string | null;
   dod: string | null;
   occupation: string | null;
+  genderLabel: string | null;
 };
 
 type SparqlResult = {
@@ -61,6 +62,7 @@ export async function runSparql(query: string, limit: number): Promise<RawCandid
         dob: row.dob?.value ?? null,
         dod: row.dod?.value ?? null,
         occupation: row.occupationLabel?.value ?? null,
+        genderLabel: row.genderLabel?.value ?? null,
       });
     }
     return out;
