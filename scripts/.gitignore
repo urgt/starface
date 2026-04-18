@@ -3,3 +3,4 @@ models/
 seeds/
 .env.local
 .seed-progress.json
+server/logs/

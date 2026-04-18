@@ -6,15 +6,12 @@ B2B SaaS white-label платформа для киоск-развлечения
 
 - **Prod (Cloudflare free tier)** — Pages (`@opennextjs/cloudflare`) + D1 + Vectorize (512-D cosine) + R2 + Cron Triggers. Никаких серверных ML-сервисов. В киоске лицо детектится (MediaPipe) и эмбеддится (MobileFaceNet ONNX через `onnxruntime-web`) прямо в браузере — на бэкенд уходит готовый 512-D вектор.
 - **Seed/enroll (локально, на машине оператора)** — `@starface/scripts`: качает фото с Wikidata, гоняет их через ту же MobileFaceNet ONNX + YuNet-детектор, батчами шлёт на `POST /api/admin/enroll` прода. Описания (UZ/RU/EN) генерируются локальным Ollama / LM Studio и `PATCH`атся в D1.
-- **Legacy dev-стек (`docker-compose.yml`, `apps/ml/`)** — Docker-based Postgres+pgvector+FastAPI+InsightFace. Оставлен на случай если оператору удобнее enroll-ить через Python; в прод НЕ деплоится.
 
 ## Репозиторий
 
 ```
 apps/web/        — Next.js 15 (kiosk, admin, /api/*). Drizzle → D1
-scripts/         — локальные seed-инструменты (enroll, descriptions, fetch-wikidata)
-docker/          — legacy dev-стек (Postgres/pgvector)
-apps/ml/         — legacy FastAPI+InsightFace (не в проде)
+scripts/         — локальные seed-инструменты (enroll, descriptions, fetch-wikidata) + dev-UI
 ```
 
 ## Prod deploy (Cloudflare)
@@ -57,15 +54,6 @@ pnpm descriptions --limit 20
 ```
 
 Подробнее — `scripts/README.md`.
-
-## Dev (legacy Docker-стек)
-
-Только если нужно поднять Postgres+InsightFace локально для dev. В проде не используется.
-
-```bash
-docker compose up --build
-open http://localhost:3000/kiosk?brand=demo
-```
 
 ## Приватность
 

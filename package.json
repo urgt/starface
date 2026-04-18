@@ -6,14 +6,10 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev:web": "pnpm --filter @starface/web dev",
-    "dev:ml": "cd apps/ml && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:ui": "pnpm --filter @starface/scripts dev:ui",
     "build:web": "pnpm --filter @starface/web build",
     "db:generate": "pnpm --filter @starface/web db:generate",
     "db:migrate": "pnpm --filter @starface/web db:migrate",
-    "db:push": "pnpm --filter @starface/web db:push",
-    "enroll": "cd apps/ml && python -m app.enroll",
-    "seed": "./scripts/seed.sh",
-    "seed:uz": "./scripts/seed.sh --category uz",
-    "seed:world": "./scripts/seed.sh --category world"
+    "db:push": "pnpm --filter @starface/web db:push"
   }
 }

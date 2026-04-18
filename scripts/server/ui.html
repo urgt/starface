@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StarFace · Панель скриптов</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      pre.log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+      pre.log .err { color: #fca5a5; }
+      pre.log .ts { color: #64748b; margin-right: 8px; }
+      .fade { transition: opacity 0.2s; }
+    </style>
+  </head>
+  <body class="bg-neutral-50 text-neutral-900 min-h-screen">
+    <div class="flex h-screen">
+      <aside class="w-64 shrink-0 border-r border-neutral-200 bg-white flex flex-col">
+        <div class="px-4 py-4 border-b border-neutral-200">
+          <div class="text-sm font-semibold">StarFace</div>
+          <div class="text-xs text-neutral-500">Панель скриптов</div>
+        </div>
+        <nav class="flex-1 overflow-y-auto p-2" id="nav"></nav>
+        <div class="border-t border-neutral-200 p-2 space-y-1">
+          <button data-view="history" class="nav-tab w-full text-left px-3 py-2 rounded-md text-sm hover:bg-neutral-100">
+            История запусков
+          </button>
+          <button data-view="env" class="nav-tab w-full text-left px-3 py-2 rounded-md text-sm hover:bg-neutral-100">
+            Окружение
+          </button>
+        </div>
+      </aside>
+
+      <main class="flex-1 overflow-hidden flex flex-col">
+        <div id="view" class="flex-1 overflow-auto"></div>
+      </main>
+    </div>
+
+    <template id="tpl-script">
+      <div class="p-6 max-w-4xl mx-auto space-y-4">
+        <header class="space-y-1">
+          <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold" data-field="title"></h1>
+            <span class="text-xs text-neutral-500" data-field="est"></span>
+          </div>
+          <p class="text-sm text-neutral-600" data-field="description"></p>
+        </header>
+
+        <section class="bg-white border border-neutral-200 rounded-lg p-4">
+          <h2 class="text-sm font-semibold mb-3">Аргументы</h2>
+          <form data-form class="space-y-3"></form>
+          <div class="mt-4 flex items-center gap-3">
+            <button data-action="launch" class="bg-neutral-900 text-white px-4 py-2 rounded-md text-sm hover:bg-neutral-700 disabled:bg-neutral-300 disabled:cursor-not-allowed">
+              Запустить
+            </button>
+            <div data-running class="hidden text-sm">
+              <span class="text-amber-600">Уже запущен —</span>
+              <a href="#" data-open-active class="text-blue-600 underline">открыть активный run</a>
+            </div>
+            <div data-error class="hidden text-sm text-red-600"></div>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <template id="tpl-run">
+      <div class="p-6 max-w-5xl mx-auto space-y-4">
+        <header class="flex items-center justify-between">
+          <div>
+            <h1 class="text-lg font-semibold" data-field="title"></h1>
+            <div class="text-xs text-neutral-500 font-mono" data-field="subtitle"></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span data-status class="px-2.5 py-1 rounded-full text-xs font-medium"></span>
+            <button data-action="stop" class="hidden bg-red-600 text-white px-3 py-1.5 rounded-md text-xs hover:bg-red-500">
+              Остановить
+            </button>
+            <a data-action="download" class="border border-neutral-300 px-3 py-1.5 rounded-md text-xs hover:bg-neutral-100">
+              Скачать лог
+            </a>
+          </div>
+        </header>
+
+        <div class="bg-white border border-neutral-200 rounded-lg p-4 space-y-2">
+          <div class="flex items-center justify-between text-xs text-neutral-500">
+            <span data-field="progress-label">Прогресс</span>
+            <span data-field="timing"></span>
+          </div>
+          <div class="h-2 bg-neutral-100 rounded overflow-hidden">
+            <div data-field="bar" class="h-full bg-neutral-900 transition-all" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <section data-field="progress-file" class="hidden bg-white border border-neutral-200 rounded-lg p-4 text-sm">
+          <h2 class="font-semibold mb-2">.seed-progress.json</h2>
+          <div class="grid grid-cols-3 gap-4 text-xs">
+            <div><span class="text-neutral-500">Успешно:</span> <span data-pg-done class="font-mono font-semibold"></span></div>
+            <div><span class="text-neutral-500">Ошибок:</span> <span data-pg-failed class="font-mono font-semibold"></span></div>
+            <div><span class="text-neutral-500">Обновлён:</span> <span data-pg-updated class="font-mono"></span></div>
+          </div>
+          <details class="mt-3" data-pg-failed-details>
+            <summary class="cursor-pointer text-xs text-neutral-600 hover:text-neutral-900">Список ошибок</summary>
+            <ul class="mt-2 text-xs font-mono space-y-1 max-h-48 overflow-y-auto" data-pg-failed-list></ul>
+          </details>
+        </section>
+
+        <section class="bg-neutral-900 rounded-lg overflow-hidden">
+          <div class="flex items-center justify-between px-3 py-2 border-b border-neutral-700 text-neutral-400 text-xs">
+            <span data-field="log-count">0 строк</span>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" data-autoscroll checked class="accent-neutral-400" />
+              <span>Авто-скролл</span>
+            </label>
+          </div>
+          <pre data-log class="log text-neutral-100 p-3 overflow-auto" style="height: 60vh; min-height: 320px"></pre>
+        </section>
+      </div>
+    </template>
+
+    <template id="tpl-history">
+      <div class="p-6 max-w-5xl mx-auto space-y-4">
+        <h1 class="text-xl font-semibold">История запусков</h1>
+        <div class="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-neutral-50 text-xs text-neutral-500 uppercase tracking-wide">
+              <tr>
+                <th class="text-left px-3 py-2">Скрипт</th>
+                <th class="text-left px-3 py-2">Запущен</th>
+                <th class="text-left px-3 py-2">Длительность</th>
+                <th class="text-left px-3 py-2">Статус</th>
+                <th class="text-left px-3 py-2">Прогресс</th>
+              </tr>
+            </thead>
+            <tbody data-history></tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    <template id="tpl-env">
+      <div class="p-6 max-w-4xl mx-auto space-y-4">
+        <h1 class="text-xl font-semibold">Проверка окружения</h1>
+        <div class="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+          <table class="w-full text-sm">
+            <tbody data-env></tbody>
+          </table>
+        </div>
+        <p class="text-xs text-neutral-500">
+          Секреты не отображаются — только наличие. URL проверяются HEAD/GET с таймаутом 2.5 сек.
+        </p>
+      </div>
+    </template>
+
+    <script type="module">
+      const STATUS_LABEL = {
+        running: "выполняется",
+        exited: "завершено",
+        failed: "ошибка",
+        stopped: "остановлено",
+        orphaned: "осиротевший",
+      };
+      const STATUS_CLASS = {
+        running: "bg-amber-100 text-amber-800",
+        exited: "bg-emerald-100 text-emerald-800",
+        failed: "bg-red-100 text-red-800",
+        stopped: "bg-yellow-100 text-yellow-800",
+        orphaned: "bg-neutral-200 text-neutral-700",
+      };
+      const SCRIPT_TITLES = {};
+
+      const state = {
+        scripts: [],
+        runs: [],
+        view: null,
+        activeEs: null,
+      };
+
+      const viewEl = document.getElementById("view");
+
+      async function api(path, init) {
+        const res = await fetch(path, init);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: res.statusText }));
+          throw Object.assign(new Error(body.error || res.statusText), { status: res.status, body });
+        }
+        return res.json();
+      }
+
+      async function loadScripts() {
+        state.scripts = await api("/api/scripts");
+        for (const s of state.scripts) SCRIPT_TITLES[s.id] = s.title;
+        renderNav();
+      }
+
+      async function loadRuns() {
+        state.runs = await api("/api/runs");
+        renderNav();
+      }
+
+      function renderNav() {
+        const nav = document.getElementById("nav");
+        nav.innerHTML = "";
+        for (const s of state.scripts) {
+          const active = state.runs.find((r) => r.scriptId === s.id && r.status === "running");
+          const btn = document.createElement("button");
+          btn.className =
+            "nav-tab w-full text-left px-3 py-2 rounded-md text-sm hover:bg-neutral-100 flex items-center justify-between";
+          btn.dataset.view = `script:${s.id}`;
+          btn.innerHTML = `
+            <span>${s.title}</span>
+            ${active ? '<span class="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>' : ""}
+          `;
+          nav.appendChild(btn);
+        }
+        bindNav();
+        highlightNav();
+      }
+
+      function bindNav() {
+        document.querySelectorAll(".nav-tab").forEach((el) => {
+          el.onclick = () => navigate(el.dataset.view);
+        });
+      }
+
+      function highlightNav() {
+        document.querySelectorAll(".nav-tab").forEach((el) => {
+          if (el.dataset.view === state.view) {
+            el.classList.add("bg-neutral-900", "text-white");
+            el.classList.remove("hover:bg-neutral-100");
+          } else {
+            el.classList.remove("bg-neutral-900", "text-white");
+            el.classList.add("hover:bg-neutral-100");
+          }
+        });
+      }
+
+      function closeStream() {
+        if (state.activeEs) {
+          state.activeEs.close();
+          state.activeEs = null;
+        }
+      }
+
+      function navigate(view) {
+        state.view = view;
+        closeStream();
+        highlightNav();
+        if (!view) return;
+        if (view.startsWith("script:")) renderScript(view.slice(7));
+        else if (view.startsWith("run:")) renderRun(view.slice(4));
+        else if (view === "history") renderHistory();
+        else if (view === "env") renderEnv();
+      }
+
+      function renderScript(id) {
+        const def = state.scripts.find((s) => s.id === id);
+        if (!def) return;
+        const tpl = document.getElementById("tpl-script").content.cloneNode(true);
+        tpl.querySelector('[data-field="title"]').textContent = def.title;
+        tpl.querySelector('[data-field="description"]').textContent = def.description;
+        tpl.querySelector('[data-field="est"]').textContent =
+          `≈ ${def.estMinutes[0]}–${def.estMinutes[1]} мин`;
+
+        const form = tpl.querySelector("[data-form]");
+        for (const f of def.fields) form.appendChild(renderField(f));
+
+        const active = state.runs.find((r) => r.scriptId === id && r.status === "running");
+        const runningEl = tpl.querySelector("[data-running]");
+        const launchBtn = tpl.querySelector('[data-action="launch"]');
+        const errEl = tpl.querySelector("[data-error]");
+        if (active) {
+          runningEl.classList.remove("hidden");
+          launchBtn.disabled = true;
+          runningEl.querySelector("[data-open-active]").onclick = (e) => {
+            e.preventDefault();
+            navigate(`run:${active.id}`);
+          };
+        }
+
+        launchBtn.onclick = async (e) => {
+          e.preventDefault();
+          errEl.classList.add("hidden");
+          const values = {};
+          for (const f of def.fields) {
+            const input = form.querySelector(`[name="${f.name}"]`);
+            if (!input) continue;
+            if (f.kind === "boolean") values[f.name] = input.checked;
+            else values[f.name] = input.value;
+          }
+          launchBtn.disabled = true;
+          launchBtn.textContent = "Запускаем…";
+          try {
+            const meta = await api("/api/runs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scriptId: id, values }),
+            });
+            await loadRuns();
+            navigate(`run:${meta.id}`);
+          } catch (err) {
+            if (err.status === 409 && err.body?.runId) {
+              await loadRuns();
+              navigate(`run:${err.body.runId}`);
+              return;
+            }
+            errEl.textContent = `Ошибка: ${err.message}`;
+            errEl.classList.remove("hidden");
+          } finally {
+            launchBtn.disabled = false;
+            launchBtn.textContent = "Запустить";
+          }
+        };
+
+        viewEl.replaceChildren(tpl);
+      }
+
+      function renderField(f) {
+        const wrap = document.createElement("label");
+        wrap.className = "block text-sm";
+        const title = document.createElement("span");
+        title.className = "text-neutral-700 block mb-1";
+        title.textContent = f.label;
+        wrap.appendChild(title);
+
+        let input;
+        if (f.kind === "select") {
+          input = document.createElement("select");
+          input.className =
+            "border border-neutral-300 rounded-md bg-white px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900";
+          for (const o of f.options) {
+            const opt = document.createElement("option");
+            opt.value = o;
+            opt.textContent = o === "" ? "— без фильтра —" : o;
+            if (o === f.default) opt.selected = true;
+            input.appendChild(opt);
+          }
+        } else if (f.kind === "boolean") {
+          wrap.className = "flex items-center gap-2 text-sm";
+          input = document.createElement("input");
+          input.type = "checkbox";
+          input.className = "accent-neutral-900";
+          if (f.default) input.checked = true;
+          wrap.innerHTML = "";
+          wrap.appendChild(input);
+          const label = document.createElement("span");
+          label.className = "text-neutral-700";
+          label.textContent = f.label;
+          wrap.appendChild(label);
+        } else {
+          input = document.createElement("input");
+          input.type = f.kind === "number" ? "number" : "text";
+          input.className =
+            "border border-neutral-300 rounded-md bg-white px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900";
+          if (f.placeholder) input.placeholder = f.placeholder;
+          if (f.default !== undefined) input.value = String(f.default);
+          if (f.kind === "number" && f.min !== undefined) input.min = String(f.min);
+        }
+        input.name = f.name;
+        if (f.kind !== "boolean") wrap.appendChild(input);
+        return wrap;
+      }
+
+      async function renderRun(id) {
+        let meta;
+        try {
+          meta = await api(`/api/runs/${id}`);
+        } catch {
+          viewEl.innerHTML = '<div class="p-6 text-sm text-red-600">Run не найден</div>';
+          return;
+        }
+
+        const tpl = document.getElementById("tpl-run").content.cloneNode(true);
+        const root = tpl.querySelector("div.p-6");
+        root.dataset.runId = id;
+        tpl.querySelector('[data-field="title"]').textContent =
+          SCRIPT_TITLES[meta.scriptId] || meta.scriptId;
+        tpl.querySelector('[data-field="subtitle"]').textContent =
+          `pnpm run ${meta.scriptId === "wikidata" ? "fetch-wikidata" : meta.scriptId} ${meta.argv.join(" ")}`;
+        tpl.querySelector('[data-action="download"]').href = `/api/runs/${id}/log`;
+        tpl.querySelector('[data-action="download"]').setAttribute("download", `${id}.log`);
+
+        const logEl = tpl.querySelector("[data-log]");
+        const logCount = tpl.querySelector('[data-field="log-count"]');
+        const autoScroll = tpl.querySelector("[data-autoscroll]");
+        const statusEl = tpl.querySelector("[data-status]");
+        const stopBtn = tpl.querySelector('[data-action="stop"]');
+        const barEl = tpl.querySelector('[data-field="bar"]');
+        const progressLabel = tpl.querySelector('[data-field="progress-label"]');
+        const timingEl = tpl.querySelector('[data-field="timing"]');
+        const pgSection = tpl.querySelector('[data-field="progress-file"]');
+
+        let lineCount = 0;
+        let lastStatus = meta.status;
+
+        const applyStatus = (m) => {
+          lastStatus = m.status;
+          statusEl.className = `px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_CLASS[m.status] || ""}`;
+          statusEl.textContent = STATUS_LABEL[m.status] || m.status;
+          stopBtn.classList.toggle("hidden", m.status !== "running");
+          if (m.progress) {
+            const pct = m.progress.total ? Math.round((m.progress.current / m.progress.total) * 100) : 0;
+            barEl.style.width = `${pct}%`;
+            progressLabel.textContent = `${m.progress.current} / ${m.progress.total}`;
+          }
+          const duration =
+            (m.endedAt || Date.now()) - m.startedAt;
+          timingEl.textContent = `${formatDuration(duration)}${m.exitCode !== undefined && m.exitCode !== null ? ` · exit ${m.exitCode}` : ""}`;
+        };
+
+        const appendLine = (line) => {
+          lineCount++;
+          logCount.textContent = `${lineCount} строк`;
+          const row = document.createElement("span");
+          const ts = new Date(line.t).toISOString().slice(11, 19);
+          row.innerHTML = `<span class="ts">${ts}</span><span class="${line.stream === "stderr" ? "err" : ""}"></span>\n`;
+          row.lastElementChild.textContent = line.text;
+          logEl.appendChild(row);
+          if (autoScroll.checked) logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        applyStatus(meta);
+
+        stopBtn.onclick = async () => {
+          stopBtn.disabled = true;
+          try {
+            await api(`/api/runs/${id}/stop`, { method: "POST" });
+          } catch (e) {
+            alert("Не удалось остановить: " + e.message);
+          } finally {
+            stopBtn.disabled = false;
+          }
+        };
+
+        if (meta.scriptId === "enroll") {
+          pgSection.classList.remove("hidden");
+          loadProgressFile(pgSection);
+        }
+
+        viewEl.replaceChildren(tpl);
+
+        closeStream();
+        const es = new EventSource(`/api/runs/${id}/events`);
+        state.activeEs = es;
+        es.addEventListener("line", (e) => appendLine(JSON.parse(e.data)));
+        es.addEventListener("status", (e) => applyStatus(JSON.parse(e.data)));
+        es.addEventListener("progress", (e) => {
+          const p = JSON.parse(e.data);
+          const pct = p.total ? Math.round((p.current / p.total) * 100) : 0;
+          barEl.style.width = `${pct}%`;
+          progressLabel.textContent = `${p.current} / ${p.total}`;
+        });
+        es.addEventListener("end", (e) => {
+          applyStatus(JSON.parse(e.data));
+          es.close();
+          if (state.activeEs === es) state.activeEs = null;
+          loadRuns();
+          if (meta.scriptId === "enroll") loadProgressFile(pgSection);
+        });
+        es.onerror = () => {
+          if (lastStatus !== "running") es.close();
+        };
+      }
+
+      async function loadProgressFile(section) {
+        try {
+          const p = await api("/api/progress");
+          section.querySelector("[data-pg-done]").textContent = p.done.length;
+          section.querySelector("[data-pg-failed]").textContent = p.failed.length;
+          section.querySelector("[data-pg-updated]").textContent = p.updatedAt
+            ? new Date(p.updatedAt).toLocaleString()
+            : "—";
+          const list = section.querySelector("[data-pg-failed-list]");
+          list.innerHTML = "";
+          for (const f of p.failed.slice(0, 200)) {
+            const li = document.createElement("li");
+            li.className = "text-neutral-700";
+            li.innerHTML = `<span class="text-neutral-400">${escapeHtml(f.externalId)}</span> — <span class="text-red-600">${escapeHtml(f.reason)}</span>`;
+            list.appendChild(li);
+          }
+          section.querySelector("[data-pg-failed-details]").open = p.failed.length > 0;
+        } catch {
+          /* noop */
+        }
+      }
+
+      async function renderHistory() {
+        await loadRuns();
+        const tpl = document.getElementById("tpl-history").content.cloneNode(true);
+        const tbody = tpl.querySelector("[data-history]");
+        for (const r of state.runs) {
+          const tr = document.createElement("tr");
+          tr.className = "border-t border-neutral-200 hover:bg-neutral-50 cursor-pointer";
+          tr.onclick = () => navigate(`run:${r.id}`);
+          const duration = (r.endedAt || Date.now()) - r.startedAt;
+          tr.innerHTML = `
+            <td class="px-3 py-2">${SCRIPT_TITLES[r.scriptId] || r.scriptId}</td>
+            <td class="px-3 py-2 text-neutral-600">${new Date(r.startedAt).toLocaleString()}</td>
+            <td class="px-3 py-2 text-neutral-600">${formatDuration(duration)}</td>
+            <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-xs ${STATUS_CLASS[r.status] || ""}">${STATUS_LABEL[r.status] || r.status}</span></td>
+            <td class="px-3 py-2 text-neutral-600 font-mono text-xs">${r.progress ? `${r.progress.current}/${r.progress.total}` : "—"}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+        if (!state.runs.length) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = '<td colspan="5" class="px-3 py-8 text-center text-neutral-500">Запусков ещё не было</td>';
+          tbody.appendChild(tr);
+        }
+        viewEl.replaceChildren(tpl);
+      }
+
+      async function renderEnv() {
+        viewEl.innerHTML = '<div class="p-6 text-sm text-neutral-500">Проверяем…</div>';
+        const report = await api("/api/env");
+        const tpl = document.getElementById("tpl-env").content.cloneNode(true);
+        const tbody = tpl.querySelector("[data-env]");
+        const rows = [
+          ["PROD_URL", report.prodUrl.value, report.prodUrl.reachable ? "доступен" : "недоступен", report.prodUrl.reachable],
+          ["ADMIN_USER", report.adminUser.value, "", null],
+          ["ADMIN_PASSWORD", report.adminPassword.set ? "установлен" : "не установлен", "", report.adminPassword.set],
+          ["LM_BASE_URL", report.lmBaseUrl.value, report.lmBaseUrl.reachable ? "доступен" : "недоступен", report.lmBaseUrl.reachable],
+          ["LM_MODEL", report.lmModel.value, "", null],
+          ["LM_API_KEY", report.lmApiKey.set ? "установлен" : "не установлен", "", report.lmApiKey.set],
+          ["FACENET_MODEL", report.facenetModel.path, report.facenetModel.exists ? "найден" : "отсутствует", report.facenetModel.exists],
+          ["YUNET_MODEL", report.yunetModel.path, report.yunetModel.exists ? "найден" : "отсутствует", report.yunetModel.exists],
+          [".env.local", report.envFile.path, report.envFile.exists ? "найден" : "отсутствует", report.envFile.exists],
+          ["SEED_OUT_DIR", report.seedOutDir.path, report.seedOutDir.exists ? "существует" : "нет", report.seedOutDir.exists],
+          [".seed-progress.json", report.progressFile.path, report.progressFile.exists ? "есть" : "нет", report.progressFile.exists],
+        ];
+        for (const [key, value, hint, ok] of rows) {
+          const tr = document.createElement("tr");
+          tr.className = "border-t border-neutral-200";
+          tr.innerHTML = `
+            <td class="px-3 py-2 font-mono text-xs text-neutral-500 w-48">${key}</td>
+            <td class="px-3 py-2 font-mono text-xs break-all">${escapeHtml(value || "")}</td>
+            <td class="px-3 py-2 text-xs ${ok === true ? "text-emerald-700" : ok === false ? "text-red-600" : "text-neutral-500"}">${hint}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+        viewEl.replaceChildren(tpl);
+      }
+
+      function formatDuration(ms) {
+        if (!Number.isFinite(ms) || ms < 0) return "—";
+        const s = Math.floor(ms / 1000);
+        if (s < 60) return `${s}s`;
+        const m = Math.floor(s / 60);
+        const rs = s % 60;
+        if (m < 60) return `${m}m ${rs}s`;
+        const h = Math.floor(m / 60);
+        return `${h}h ${m % 60}m`;
+      }
+
+      function escapeHtml(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        })[c]);
+      }
+
+      (async function init() {
+        await loadScripts();
+        await loadRuns();
+        bindNav();
+        const firstScript = state.scripts[0];
+        if (firstScript) navigate(`script:${firstScript.id}`);
+        setInterval(loadRuns, 5000);
+      })();
+    </script>
+  </body>
+</html>

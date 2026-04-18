@@ -8,18 +8,6 @@ node_modules/
 out/
 build/
 
-# python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-.pytest_cache/
-
-# ml models cache
-apps/ml/ml-models/
-~/.insightface/
-
 # data / runtime
 data/
 *.log
@@ -45,3 +33,9 @@ apps/web/cloudflare-env.d.ts
 
 # typescript build info
 *.tsbuildinfo
+
+# seed tooling (local artifacts, not committed)
+scripts/models/
+scripts/seeds/
+scripts/logs/
+scripts/.seed-progress.json

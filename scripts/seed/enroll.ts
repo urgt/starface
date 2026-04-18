@@ -183,9 +183,7 @@ async function flushBatch(
   dryRun: boolean,
 ): Promise<void> {
   if (dryRun) {
-    console.log(`  [dry-run] would POST ${batch.length} celebrities`);
-    for (const c of batch) progress.done.push(c.externalId ?? c.name);
-    saveProgress(progressPath, progress);
+    console.log(`  [dry-run] would POST ${batch.length} celebrities (progress NOT updated)`);
     return;
   }
   const result = await postBatch(batch);
