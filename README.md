@@ -9,7 +9,7 @@ B2B SaaS white-label платформа для киоск-развлечения
 - **Kiosk (browser)** — только MediaPipe Blaze Face как UX-гейт «лицо не видно». Кадры уходят сырыми на `/api/embed/burst`, оттуда на Modal. Никакого ONNX в браузере.
 - **Seed/enroll (локально, GPU)** — `scripts/seed/py/` на Python. Импортирует тот же `modal_app/pipeline.py`, что гарантирует identical embedding space с киоском. Wikidata fetch + LLM descriptions — Node (`scripts/seed/*.ts`).
 
-Подробная карта архитектуры и hard rules — в `CLAUDE.md`.
+Подробная карта архитектуры и hard rules — в `CLAUDE.md`. Локальный запуск без Modal (на своей GPU) — в `LOCAL_DEV.md`.
 
 ## Репозиторий
 

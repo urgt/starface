@@ -29,7 +29,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from modal_app import pipeline  # noqa: E402
 
-BATCH_SIZE = 25
+BATCH_SIZE = 5
 
 
 def _load_dotenv(path: Path) -> None:

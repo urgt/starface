@@ -11,6 +11,9 @@ dependencies = [
     "pillow>=10.0",
     "numpy>=1.26,<2",
     "requests>=2.31",
+    "starlette>=0.37",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.uv]
