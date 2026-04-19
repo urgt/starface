@@ -51,8 +51,8 @@ export function ResultCard({ data, brand, locale }: Props) {
 
   return (
     <div className="relative min-h-screen bg-brand-gradient font-brand text-white" style={cssVars}>
-      {/* ambient glows */}
-      <div className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[620px] -translate-x-1/2 rounded-full bg-[var(--brand-primary)]/20 blur-3xl" />
+      {/* ambient glow — kept small so mobile GPUs don't churn on a huge blur layer */}
+      <div className="pointer-events-none absolute -top-16 left-1/2 h-[200px] w-[320px] -translate-x-1/2 rounded-full bg-[var(--brand-primary)]/15 blur-2xl" />
 
       <div className="relative mx-auto max-w-md px-5 py-8 md:max-w-lg">
         {/* top brand row */}
@@ -119,13 +119,10 @@ export function ResultCard({ data, brand, locale }: Props) {
           </div>
           <div
             className="mt-2 font-brand font-black leading-none text-[var(--brand-primary)]"
-            style={{
-              fontSize: "clamp(4rem, 22vw, 7rem)",
-              textShadow: "0 0 40px var(--brand-primary)",
-            }}
+            style={{ fontSize: "clamp(3rem, 18vw, 6rem)" }}
           >
             {data.similarity}
-            <span className="text-3xl md:text-5xl">%</span>
+            <span className="text-2xl md:text-4xl">%</span>
           </div>
           <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/50">{dict.similarity}</p>
           <p className="mt-4 text-2xl font-bold text-white">{celebName}</p>

@@ -6,6 +6,16 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
   ],
   theme: {
+    screens: {
+      // TV-friendly breakpoints: 540p / 720p are the common logical widths
+      // on embedded-browser smart TVs. Keep defaults `md/lg/xl` for admin.
+      tv: "640px",
+      "tv-hd": "960px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+    },
     extend: {
       colors: {
         brand: {
@@ -36,7 +46,6 @@ const config: Config = {
         "mosaic-scroll": "mosaicScroll 60s linear infinite",
         "glow-pulse": "glowPulse 2.4s ease-in-out infinite",
         "float-in": "floatIn 700ms cubic-bezier(0.16, 1, 0.3, 1) both",
-        "shimmer": "shimmer 3s linear infinite",
         "scan-sweep": "scanSweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
         "flash": "flashFade 260ms ease-out both",
       },
@@ -51,16 +60,12 @@ const config: Config = {
           "100%": { transform: "translateY(-50%)" },
         },
         glowPulse: {
-          "0%, 100%": { filter: "drop-shadow(0 0 24px var(--brand-primary))" },
-          "50%": { filter: "drop-shadow(0 0 56px var(--brand-primary))" },
+          "0%, 100%": { opacity: "0.85" },
+          "50%": { opacity: "1" },
         },
         floatIn: {
           "0%": { transform: "translateY(24px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
-        },
-        shimmer: {
-          "0%": { backgroundPosition: "200% 0" },
-          "100%": { backgroundPosition: "-200% 0" },
         },
         scanSweep: {
           "0%": { transform: "translateY(-120%)" },

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { MEDIAPIPE_WASM_ROOT } from "@/lib/face-embed";
+
 type GestureState = "idle" | "loading" | "ready" | "error";
 
 type UseGestureDetectorOpts = {
@@ -13,7 +15,7 @@ type UseGestureDetectorOpts = {
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
-const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
+const TICK_MS = 50;
 
 // MediaPipe/TF Lite WASM writes benign "INFO:" / "W0000 ...:" / "I0000 ...:" lines
 // to stderr. In browsers that maps to console.error, which the Next.js dev overlay
@@ -33,6 +35,20 @@ function suppressMediaPipeInfoLogs() {
   };
 }
 
+type RIC = (cb: () => void, opts?: { timeout: number }) => number;
+const scheduleIdle = (cb: () => void): number => {
+  if (typeof window === "undefined") return 0;
+  const ric = (window as unknown as { requestIdleCallback?: RIC }).requestIdleCallback;
+  if (ric) return ric(cb, { timeout: 1500 });
+  return window.setTimeout(cb, 300);
+};
+const cancelIdle = (id: number) => {
+  if (typeof window === "undefined") return;
+  const cric = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+  if (cric) cric(id);
+  else window.clearTimeout(id);
+};
+
 export function useGestureDetector({
   videoRef,
   enabled,
@@ -43,24 +59,37 @@ export function useGestureDetector({
   const [progress, setProgress] = useState(0);
   const recognizerRef = useRef<import("@mediapipe/tasks-vision").GestureRecognizer | null>(null);
   const victorySinceRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
   const firedRef = useRef(false);
-  const lastTsRef = useRef(0);
 
+  // Lazy init: don't download the MediaPipe WASM + gesture model until the
+  // camera stream is actually up. On slow TVs this removes a ~2MB blocking
+  // download from the initial /kiosk page-load waterfall.
   useEffect(() => {
+    if (!enabled || state !== "idle") return;
     let cancelled = false;
+    let idleId = 0;
 
     async function init() {
       try {
         suppressMediaPipeInfoLogs();
         setState("loading");
         const vision = await import("@mediapipe/tasks-vision");
-        const filesetResolver = await vision.FilesetResolver.forVisionTasks(WASM_ROOT);
-        const recognizer = await vision.GestureRecognizer.createFromOptions(filesetResolver, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-          runningMode: "VIDEO",
-          numHands: 1,
-        });
+        const filesetResolver = await vision.FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_ROOT);
+        const createWith = async (delegate: "GPU" | "CPU") =>
+          vision.GestureRecognizer.createFromOptions(filesetResolver, {
+            baseOptions: { modelAssetPath: MODEL_URL, delegate },
+            runningMode: "VIDEO",
+            numHands: 1,
+          });
+        let recognizer: import("@mediapipe/tasks-vision").GestureRecognizer;
+        try {
+          recognizer = await createWith("GPU");
+        } catch (gpuErr) {
+          // Many embedded-TV browsers lack WebGL2 — fall back to CPU so we
+          // at least get the gesture gate rather than erroring the kiosk.
+          console.warn("gesture GPU delegate failed, retrying with CPU", gpuErr);
+          recognizer = await createWith("CPU");
+        }
         if (cancelled) {
           recognizer.close();
           return;
@@ -73,16 +102,18 @@ export function useGestureDetector({
       }
     }
 
-    init();
+    idleId = scheduleIdle(init);
 
     return () => {
       cancelled = true;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (idleId) cancelIdle(idleId);
       recognizerRef.current?.close();
       recognizerRef.current = null;
     };
-  }, []);
+  }, [enabled, state]);
 
+  // Gesture polling: setInterval at TICK_MS so we don't burn 60fps of empty
+  // RAF callbacks on idle TV CPUs. Paused when the page is hidden.
   useEffect(() => {
     if (!enabled || state !== "ready") return;
 
@@ -91,46 +122,36 @@ export function useGestureDetector({
     setProgress(0);
 
     const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       const video = videoRef.current;
       const recognizer = recognizerRef.current;
-      if (!video || !recognizer || video.readyState < 2) {
-        rafRef.current = requestAnimationFrame(tick);
-        return;
-      }
+      if (!video || !recognizer || video.readyState < 2) return;
 
       const ts = performance.now();
-      if (ts - lastTsRef.current > 50) {
-        lastTsRef.current = ts;
-        try {
-          const result = recognizer.recognizeForVideo(video, ts);
-          const top = result.gestures[0]?.[0];
-          const isVictory = top?.categoryName === "Victory" && top.score > 0.6;
+      try {
+        const result = recognizer.recognizeForVideo(video, ts);
+        const top = result.gestures[0]?.[0];
+        const isVictory = top?.categoryName === "Victory" && top.score > 0.6;
 
-          if (isVictory) {
-            if (victorySinceRef.current == null) victorySinceRef.current = ts;
-            const held = ts - victorySinceRef.current;
-            setProgress(Math.min(1, held / holdMs));
-            if (held >= holdMs && !firedRef.current) {
-              firedRef.current = true;
-              onVictoryHold();
-            }
-          } else {
-            victorySinceRef.current = null;
-            setProgress(0);
+        if (isVictory) {
+          if (victorySinceRef.current == null) victorySinceRef.current = ts;
+          const held = ts - victorySinceRef.current;
+          setProgress(Math.min(1, held / holdMs));
+          if (held >= holdMs && !firedRef.current) {
+            firedRef.current = true;
+            onVictoryHold();
           }
-        } catch (err) {
-          console.warn("gesture frame failed", err);
+        } else {
+          victorySinceRef.current = null;
+          setProgress(0);
         }
+      } catch (err) {
+        console.warn("gesture frame failed", err);
       }
-
-      rafRef.current = requestAnimationFrame(tick);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    const intervalId = window.setInterval(tick, TICK_MS);
+    return () => window.clearInterval(intervalId);
   }, [enabled, state, videoRef, onVictoryHold, holdMs]);
 
   return { state, progress };

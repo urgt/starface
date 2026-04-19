@@ -5,8 +5,8 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardR
 import { useGestureDetector } from "./useGestureDetector";
 
 export type GestureCameraHandle = {
-  capture: () => string | null;
-  captureBurst: (count?: number, intervalMs?: number) => Promise<string[]>;
+  capture: () => Promise<Blob | null>;
+  captureBurst: (count?: number, intervalMs?: number) => Promise<Blob[]>;
 };
 
 export type GestureCameraVariant = "fullscreen" | "corner" | "hidden";
@@ -25,6 +25,12 @@ type CamErrorCode =
   | "no_camera"
   | "camera_failed"
   | string;
+
+// Cap encoded JPEG at ~720p long edge. 1280x720 webcam frames are plenty for
+// DINOv2 after YuNet crops to 224x224 on the server; encoding the full frame
+// costs ~100-200ms on embedded TV browsers for no extra embedding quality.
+const CAPTURE_MAX_LONG_EDGE = 720;
+const CAPTURE_JPEG_QUALITY = 0.85;
 
 export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function GestureCamera(
   { active, onGestureDetected, mirrored = true, variant = "fullscreen" },
@@ -45,8 +51,6 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
     const stream = streamRef.current;
     if (el && stream && el.srcObject !== stream) {
       el.srcObject = stream;
-      // Autoplay is allowed because the kiosk already had a user gesture to
-      // enter the flow; .catch suppresses the rare "play interrupted" warning.
       el.play().catch(() => {});
     }
   }, []);
@@ -109,23 +113,31 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
     holdMs: 500,
   });
 
-  const capture = useCallback(() => {
+  const capture = useCallback(async (): Promise<Blob | null> => {
     const video = videoRef.current;
-    if (!video) return null;
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
+    const srcW = video.videoWidth;
+    const srcH = video.videoHeight;
+    const longEdge = Math.max(srcW, srcH);
+    const scale = longEdge > CAPTURE_MAX_LONG_EDGE ? CAPTURE_MAX_LONG_EDGE / longEdge : 1;
+    const dstW = Math.round(srcW * scale);
+    const dstH = Math.round(srcH * scale);
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = dstW;
+    canvas.height = dstH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.9);
+    ctx.drawImage(video, 0, 0, dstW, dstH);
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", CAPTURE_JPEG_QUALITY);
+    });
   }, []);
 
   const captureBurst = useCallback(
-    async (count = 3, intervalMs = 80): Promise<string[]> => {
-      const frames: string[] = [];
+    async (count = 3, intervalMs = 80): Promise<Blob[]> => {
+      const frames: Blob[] = [];
       for (let i = 0; i < count; i++) {
-        const frame = capture();
+        const frame = await capture();
         if (frame) frames.push(frame);
         if (i < count - 1) await new Promise((r) => setTimeout(r, intervalMs));
       }
@@ -136,9 +148,8 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
 
   useImperativeHandle(ref, () => ({ capture, captureBurst }), [capture, captureBurst]);
 
-  // Always hoist a fullscreen error overlay over everything when the camera fails.
   const errorOverlay = camError ? (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-6">
       <CameraErrorCard code={camError} />
     </div>
   ) : null;
@@ -160,7 +171,7 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
   if (variant === "corner") {
     return (
       <>
-        <div className="pointer-events-none absolute bottom-6 right-6 z-20 w-[260px] overflow-hidden rounded-3xl border border-white/15 bg-black/40 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] backdrop-blur-sm">
+        <div className="pointer-events-none absolute bottom-3 right-3 z-20 w-[clamp(140px,22vw,260px)] overflow-hidden rounded-3xl border border-white/15 bg-black/40 shadow-xl tv:bottom-6 tv:right-6">
           <div className="relative aspect-[3/4]">
             <video
               ref={setVideoEl}
@@ -168,17 +179,14 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
               playsInline
               muted
             />
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[var(--brand-primary)]/40 to-transparent"
-              style={{ animation: "mosaicScroll 4s linear infinite" }}
-            />
-            <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[var(--brand-primary)]/30 to-transparent" />
+            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/90">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
               Live
             </div>
             {state === "ready" && progress > 0 && (
               <div className="absolute inset-0 flex items-end justify-center pb-3">
-                <div className="h-1.5 w-[180px] overflow-hidden rounded-full bg-white/15">
+                <div className="h-1.5 w-[clamp(100px,18vw,180px)] overflow-hidden rounded-full bg-white/15">
                   <div
                     className="h-full bg-[var(--brand-primary)] transition-[width] duration-75"
                     style={{ width: `${progress * 100}%` }}

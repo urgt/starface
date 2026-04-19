@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Locale } from "@/lib/i18n";
 import { brandCssVars, type BrandTheme } from "@/lib/brand-theme";
-import { bitmapFromDataUrl, embedBurst, FaceEmbedError } from "@/lib/face-embed";
+import { embedBurst, FaceEmbedError } from "@/lib/face-embed";
 import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { GestureCamera, type GestureCameraHandle } from "./GestureCamera";
 import { IdleScreen } from "./IdleScreen";
@@ -82,9 +82,10 @@ export function KioskApp({ brand, appUrl }: Props) {
 
     setPhase("analyzing");
     try {
-      const bitmaps = await Promise.all(frames.map((f) => bitmapFromDataUrl(f)));
-      const embed = await embedBurst(bitmaps);
-      bitmaps.forEach((b) => b.close());
+      const [embed, userPhotoBase64] = await Promise.all([
+        embedBurst(frames),
+        blobToDataUrl(frames[0]),
+      ]);
 
       const res = await fetch("/api/match", {
         method: "POST",
@@ -92,7 +93,7 @@ export function KioskApp({ brand, appUrl }: Props) {
         body: JSON.stringify({
           brandId: brand.id,
           embedding: embed.embedding,
-          userPhotoBase64: frames[0],
+          userPhotoBase64,
           detScore: embed.detScore,
           faceQuality: embed.faceQuality,
           clientSex: embed.sex,
@@ -184,6 +185,15 @@ function fireEvent(body: {
     body: JSON.stringify(body),
     keepalive: true,
   }).catch(() => {});
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function humanizeError(code: string): string {

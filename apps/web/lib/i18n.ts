@@ -88,19 +88,9 @@ export function t(locale: Locale): Dict {
   return dict[locale] ?? dict.uz;
 }
 
-export const FONT_FAMILIES = ["manrope", "inter", "unbounded", "space_grotesk"] as const;
+export const FONT_FAMILIES = ["manrope"] as const;
 export type FontFamily = (typeof FONT_FAMILIES)[number];
 
-export function fontFamilyVar(name: string | null | undefined): string {
-  switch (name) {
-    case "inter":
-      return "var(--font-inter)";
-    case "unbounded":
-      return "var(--font-unbounded)";
-    case "space_grotesk":
-      return "var(--font-space-grotesk)";
-    case "manrope":
-    default:
-      return "var(--font-manrope)";
-  }
+export function fontFamilyVar(_name?: string | null): string {
+  return "var(--font-manrope)";
 }

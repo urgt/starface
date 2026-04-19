@@ -1,27 +1,12 @@
-import type { Metadata } from "next";
-import { Inter, Manrope, Space_Grotesk, Unbounded } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 
 const manrope = Manrope({
   subsets: ["latin", "cyrillic"],
   variable: "--font-manrope",
   display: "swap",
-});
-const inter = Inter({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-inter",
-  display: "swap",
-});
-const unbounded = Unbounded({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-unbounded",
-  display: "swap",
-  weight: ["400", "500", "700", "800", "900"],
-});
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-space-grotesk",
-  display: "swap",
+  weight: ["400", "600", "800"],
 });
 
 export const metadata: Metadata = {
@@ -29,10 +14,16 @@ export const metadata: Metadata = {
   description: "Узнай на кого из знаменитостей ты похож",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0a0a0a",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const fontVars = `${manrope.variable} ${inter.variable} ${unbounded.variable} ${spaceGrotesk.variable}`;
   return (
-    <html lang="ru" className={fontVars}>
+    <html lang="ru" className={manrope.variable}>
       <body>{children}</body>
     </html>
   );

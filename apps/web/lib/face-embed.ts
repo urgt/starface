@@ -1,13 +1,11 @@
 "use client";
 
-import {
-  FaceDetector,
-  FilesetResolver,
-  type Detection,
-} from "@mediapipe/tasks-vision";
+import type { FaceDetector } from "@mediapipe/tasks-vision";
 
 // All heavy ML runs on Modal via /api/embed. MediaPipe stays as a lightweight
-// UX gate so the kiosk can tell the user "лицо не видно" before the shutter.
+// UX gate so admin tools can probe a face before uploading. The kiosk does not
+// use the detector — so we keep MediaPipe behind a dynamic import to avoid
+// pulling a ~2MB WASM chunk into the kiosk bundle.
 
 export type FaceEmbedCode =
   | "no_face"
@@ -35,12 +33,16 @@ export type EmbedResult = {
   age: number | null;
 };
 
+// Pinned to match the installed @mediapipe/tasks-vision dependency. Using
+// @latest can silently pull a runtime incompatible with the installed types.
+export const MEDIAPIPE_VERSION = "0.10.34";
+export const MEDIAPIPE_WASM_ROOT =
+  process.env.NEXT_PUBLIC_MEDIAPIPE_WASM_ROOT ??
+  `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
+
 const DETECTOR_MODEL_URL =
   process.env.NEXT_PUBLIC_FACE_DETECTOR_URL ??
   "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
-const WASM_ROOT =
-  process.env.NEXT_PUBLIC_MEDIAPIPE_WASM_ROOT ??
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 
 const EMBED_ENDPOINT = "/api/embed";
 const EMBED_BURST_ENDPOINT = "/api/embed/burst";
@@ -51,7 +53,8 @@ async function getDetector(): Promise<FaceDetector> {
   if (!detectorPromise) {
     detectorPromise = (async () => {
       try {
-        const fileset = await FilesetResolver.forVisionTasks(WASM_ROOT);
+        const { FilesetResolver, FaceDetector } = await import("@mediapipe/tasks-vision");
+        const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_ROOT);
         return await FaceDetector.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: DETECTOR_MODEL_URL, delegate: "GPU" },
           runningMode: "IMAGE",
@@ -64,20 +67,6 @@ async function getDetector(): Promise<FaceDetector> {
     })();
   }
   return detectorPromise;
-}
-
-export type FaceGateResult = {
-  detections: Detection[];
-  score: number;
-};
-
-/** Cheap UX-only face check. Does NOT embed — call detectAndEmbed for that. */
-export async function probeFace(source: ImageBitmap): Promise<FaceGateResult> {
-  const detector = await getDetector();
-  const result = detector.detect(source);
-  const detections = result.detections ?? [];
-  const score = detections[0]?.categories?.[0]?.score ?? 0;
-  return { detections, score };
 }
 
 async function bitmapToJpegBlob(bitmap: ImageBitmap, quality = 0.92): Promise<Blob> {
@@ -118,6 +107,9 @@ async function parseEmbedResponse(res: Response): Promise<EmbedResult> {
 }
 
 export async function detectAndEmbed(source: ImageBitmap): Promise<EmbedResult> {
+  // getDetector() warms up MediaPipe before the embed call so admin tools that
+  // import many photos in sequence don't re-initialize WASM per photo.
+  await getDetector();
   const blob = await bitmapToJpegBlob(source);
   const form = new FormData();
   form.append("image", blob, "frame.jpg");
@@ -130,11 +122,10 @@ export async function detectAndEmbed(source: ImageBitmap): Promise<EmbedResult> 
   return parseEmbedResponse(res);
 }
 
-export async function embedBurst(frames: ImageBitmap[]): Promise<EmbedResult> {
+export async function embedBurst(frames: Blob[]): Promise<EmbedResult> {
   if (frames.length === 0) throw new FaceEmbedError("no_face");
-  const blobs = await Promise.all(frames.map((f) => bitmapToJpegBlob(f)));
   const form = new FormData();
-  blobs.forEach((b, i) => form.append("images", b, `frame-${i}.jpg`));
+  frames.forEach((b, i) => form.append("images", b, `frame-${i}.jpg`));
   let res: Response;
   try {
     res = await fetch(EMBED_BURST_ENDPOINT, { method: "POST", body: form });
@@ -142,10 +133,4 @@ export async function embedBurst(frames: ImageBitmap[]): Promise<EmbedResult> {
     throw new FaceEmbedError("server_unavailable", (e as Error).message);
   }
   return parseEmbedResponse(res);
-}
-
-export async function bitmapFromDataUrl(dataUrl: string): Promise<ImageBitmap> {
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-  return await createImageBitmap(blob);
 }

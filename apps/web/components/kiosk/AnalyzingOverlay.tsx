@@ -6,16 +6,13 @@ import { t } from "@/lib/i18n";
 export function AnalyzingOverlay({ locale }: { locale: Locale }) {
   const dict = t(locale);
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-8 bg-brand-gradient backdrop-blur-sm font-brand">
-      <div className="relative h-40 w-40">
-        {/* pulsing rings */}
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-brand-gradient font-brand tv:gap-8">
+      <div className="relative h-28 w-28 tv:h-40 tv:w-40">
         <div
           className="absolute inset-0 rounded-full border-2 border-[var(--brand-primary)]/50"
           style={{ animation: "glowPulse 2.4s ease-in-out infinite" }}
         />
-        <div className="absolute inset-0 animate-ping rounded-full bg-[var(--brand-primary)]/20" />
-        <div className="absolute inset-8 rounded-full bg-[var(--brand-primary)] shadow-[0_0_80px_var(--brand-primary)]" />
-        {/* scanning sweep */}
+        <div className="absolute inset-6 rounded-full bg-[var(--brand-primary)] tv:inset-8" />
         <div
           className="absolute inset-0 overflow-hidden rounded-full"
           style={{ mask: "radial-gradient(circle, black 40%, transparent 70%)" }}
@@ -27,8 +24,10 @@ export function AnalyzingOverlay({ locale }: { locale: Locale }) {
         </div>
       </div>
       <div className="text-center">
-        <p className="text-3xl font-semibold tracking-tight text-white">{dict.analyzing}</p>
-        <p className="mt-2 text-sm uppercase tracking-[0.2em] text-white/50">
+        <p className="text-xl font-semibold tracking-tight text-white tv:text-3xl">
+          {dict.analyzing}
+        </p>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-white/50 tv:text-sm">
           {dict.analyzingHint}
         </p>
       </div>
