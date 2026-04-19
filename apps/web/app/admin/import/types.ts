@@ -18,3 +18,9 @@ export type CandidateRecord = {
 export type ImportStep = "pick" | "review" | "run";
 
 export type ImportCategory = "uz" | "cis" | "world";
+
+export type QueryMeta = {
+  requested: number;
+  fetchedTotal: number;
+  skippedExisting: number;
+};

@@ -4,18 +4,22 @@ import { useState } from "react";
 
 import { PRESETS } from "@/lib/wikidata-presets";
 import type { RawCandidate } from "@/lib/wikidata-query";
-import type { ImportCategory } from "./types";
+import type { ImportCategory, QueryMeta } from "./types";
 
 export function PresetPicker({
   onResults,
 }: {
-  onResults: (rows: RawCandidate[], category: ImportCategory) => void;
+  onResults: (
+    rows: RawCandidate[],
+    category: ImportCategory,
+    meta: QueryMeta,
+  ) => void;
 }) {
   const [presetId, setPresetId] = useState(PRESETS[0].id);
   const [customSparql, setCustomSparql] = useState("");
   const [customCategory, setCustomCategory] = useState<ImportCategory>("uz");
   const [mode, setMode] = useState<"preset" | "custom">("preset");
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(100);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +38,9 @@ export function PresetPicker({
       });
       const data = (await res.json()) as {
         candidates?: RawCandidate[];
+        fetchedTotal?: number;
+        skippedExisting?: number;
+        requested?: number;
         error?: string;
         detail?: string;
       };
@@ -42,7 +49,12 @@ export function PresetPicker({
         mode === "preset"
           ? (PRESETS.find((p) => p.id === presetId)?.category ?? "uz")
           : customCategory;
-      onResults(data.candidates ?? [], category);
+      const rows = data.candidates ?? [];
+      onResults(rows, category, {
+        requested: data.requested ?? limit,
+        fetchedTotal: data.fetchedTotal ?? rows.length,
+        skippedExisting: data.skippedExisting ?? 0,
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -94,7 +106,7 @@ export function PresetPicker({
             value={customSparql}
             onChange={(e) => setCustomSparql(e.target.value)}
             rows={8}
-            placeholder={`SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel WHERE { ... } LIMIT {{LIMIT}}`}
+            placeholder={`SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel ?sitelinks WHERE { ... } ORDER BY DESC(?sitelinks) LIMIT {{LIMIT}}`}
             className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 font-mono text-xs"
           />
           <label className="block text-xs">
@@ -124,6 +136,10 @@ export function PresetPicker({
           }
           className="w-32 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
         />
+        <span className="mt-1 block text-xs text-neutral-500">
+          Target count of new candidates. People already imported are excluded — the
+          server overfetches and returns up to this many fresh rows.
+        </span>
       </label>
 
       {error && (

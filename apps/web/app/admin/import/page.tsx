@@ -7,12 +7,18 @@ import { BulkImportOrchestrator } from "./BulkImportOrchestrator";
 import { CandidateReview } from "./CandidateReview";
 import { PresetPicker } from "./PresetPicker";
 import { clearState, loadState } from "./storage";
-import type { CandidateRecord, ImportCategory, ImportStep } from "./types";
+import type {
+  CandidateRecord,
+  ImportCategory,
+  ImportStep,
+  QueryMeta,
+} from "./types";
 
 export default function ImportPage() {
   const [step, setStep] = useState<ImportStep>("pick");
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
   const [category, setCategory] = useState<ImportCategory>("uz");
+  const [queryMeta, setQueryMeta] = useState<QueryMeta | null>(null);
   const [resumeAvailable, setResumeAvailable] = useState(false);
 
   useEffect(() => {
@@ -22,13 +28,17 @@ export default function ImportPage() {
     }
   }, []);
 
-  const onQueryResult = useCallback((rows: RawCandidate[], cat: ImportCategory) => {
-    setCandidates(
-      rows.map((raw) => ({ raw, selected: true, status: "queued" as const })),
-    );
-    setCategory(cat);
-    setStep("review");
-  }, []);
+  const onQueryResult = useCallback(
+    (rows: RawCandidate[], cat: ImportCategory, meta: QueryMeta) => {
+      setCandidates(
+        rows.map((raw) => ({ raw, selected: true, status: "queued" as const })),
+      );
+      setCategory(cat);
+      setQueryMeta(meta);
+      setStep("review");
+    },
+    [],
+  );
 
   const onStartRun = useCallback((selected: CandidateRecord[]) => {
     setCandidates(selected);
@@ -79,6 +89,7 @@ export default function ImportPage() {
         <CandidateReview
           candidates={candidates}
           category={category}
+          meta={queryMeta}
           onBack={() => setStep("pick")}
           onStart={onStartRun}
         />

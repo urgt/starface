@@ -10,6 +10,7 @@ export type RawCandidate = {
   dod: string | null;
   occupation: string | null;
   genderLabel: string | null;
+  sitelinks: number | null;
 };
 
 type SparqlResult = {
@@ -54,6 +55,11 @@ export async function runSparql(query: string, limit: number): Promise<RawCandid
       const qid = qidFromUri(row.person?.value ?? "");
       if (!qid || seen.has(qid)) continue;
       seen.add(qid);
+      const sitelinksRaw = row.sitelinks?.value;
+      const sitelinks =
+        sitelinksRaw !== undefined && sitelinksRaw !== ""
+          ? Number(sitelinksRaw)
+          : null;
       out.push({
         qid,
         name: row.personLabel?.value ?? qid,
@@ -63,6 +69,7 @@ export async function runSparql(query: string, limit: number): Promise<RawCandid
         dod: row.dod?.value ?? null,
         occupation: row.occupationLabel?.value ?? null,
         genderLabel: row.genderLabel?.value ?? null,
+        sitelinks: sitelinks !== null && Number.isFinite(sitelinks) ? sitelinks : null,
       });
     }
     return out;

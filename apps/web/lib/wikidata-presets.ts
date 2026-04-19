@@ -11,6 +11,7 @@ const PERSON_FIELDS = `
   OPTIONAL { ?person wdt:P569 ?dob. }
   OPTIONAL { ?person wdt:P570 ?dod. }
   OPTIONAL { ?person wdt:P106 ?occupation. }
+  ?person wikibase:sitelinks ?sitelinks.
   SERVICE wikibase:label {
     bd:serviceParam wikibase:language "en".
     ?person rdfs:label ?personLabel.
@@ -24,65 +25,45 @@ const PERSON_FIELDS = `
 
 export const PRESETS: WikidataPreset[] = [
   {
-    id: "uz-actors",
-    label: "Uzbek actors",
+    id: "uz",
+    label: "Uzbekistan",
     description:
-      "People with citizenship=Uzbekistan and occupation in {actor, film actor, television actor}.",
+      "Citizens of Uzbekistan (P27 = Q265), sorted by Wikipedia notability (sitelinks).",
     category: "uz",
     sparql: `
-      SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel WHERE {
+      SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel ?sitelinks WHERE {
         ?person wdt:P31 wd:Q5.
         ?person wdt:P27 wd:Q265.
-        VALUES ?job { wd:Q33999 wd:Q10800557 wd:Q10798782 }
-        ?person wdt:P106 ?job.
         ${PERSON_FIELDS}
-      } LIMIT {{LIMIT}}
+      } ORDER BY DESC(?sitelinks) LIMIT {{LIMIT}}
     `,
   },
   {
-    id: "uz-musicians",
-    label: "Uzbek musicians",
-    description: "Citizenship=Uzbekistan, occupation in {musician, singer, composer}.",
-    category: "uz",
-    sparql: `
-      SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel WHERE {
-        ?person wdt:P31 wd:Q5.
-        ?person wdt:P27 wd:Q265.
-        VALUES ?job { wd:Q177220 wd:Q639669 wd:Q36834 }
-        ?person wdt:P106 ?job.
-        ${PERSON_FIELDS}
-      } LIMIT {{LIMIT}}
-    `,
-  },
-  {
-    id: "cis-actors",
-    label: "CIS actors (RU/KZ/KG)",
-    description: "Actors with citizenship in {Russia, Kazakhstan, Kyrgyzstan}.",
+    id: "cis",
+    label: "CIS (RU / KZ / KG)",
+    description:
+      "Citizens of Russia, Kazakhstan, or Kyrgyzstan, sorted by Wikipedia notability (sitelinks).",
     category: "cis",
     sparql: `
-      SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel WHERE {
+      SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel ?sitelinks WHERE {
         ?person wdt:P31 wd:Q5.
         VALUES ?country { wd:Q159 wd:Q232 wd:Q813 }
         ?person wdt:P27 ?country.
-        VALUES ?job { wd:Q33999 wd:Q10800557 wd:Q10798782 }
-        ?person wdt:P106 ?job.
         ${PERSON_FIELDS}
-      } LIMIT {{LIMIT}}
+      } ORDER BY DESC(?sitelinks) LIMIT {{LIMIT}}
     `,
   },
   {
-    id: "world-actors",
-    label: "World A-list actors",
-    description: "Highly linked actors (sitelinks >= 30).",
+    id: "world",
+    label: "World",
+    description:
+      "Humans with Wikipedia sitelinks >= 30, sorted by sitelinks (worldwide notability).",
     category: "world",
     sparql: `
       SELECT DISTINCT ?person ?personLabel ?personRuLabel ?image ?dob ?dod ?occupationLabel ?sitelinks WHERE {
         ?person wdt:P31 wd:Q5.
-        VALUES ?job { wd:Q33999 wd:Q10800557 wd:Q10798782 }
-        ?person wdt:P106 ?job.
-        ?person wikibase:sitelinks ?sitelinks.
-        FILTER(?sitelinks >= 30).
         ${PERSON_FIELDS}
+        FILTER(?sitelinks >= 30).
       } ORDER BY DESC(?sitelinks) LIMIT {{LIMIT}}
     `,
   },
