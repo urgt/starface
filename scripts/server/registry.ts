@@ -63,8 +63,8 @@ export const SCRIPTS: ScriptDef[] = [
     pnpmScript: "enroll",
     title: "Enroll знаменитостей",
     description:
-      "Локальный ArcFace ONNX embedding → батчами по 25 POST на /api/admin/enroll. Резюмируется через .seed-progress.json.",
-    estMinutes: [10, 60],
+      "Локальный GPU (DINOv2 ViT-L/14 на Python) → батчами по 25 POST на /api/admin/enroll. Использует modal_app/pipeline.py, так что embedding space совпадает с Modal. Резюмируется через scripts/seed/py/.seed-progress.json.",
+    estMinutes: [5, 30],
     fields: [
       { kind: "string", name: "manifest", label: "Путь к manifest.json", placeholder: "./seeds/wikidata/manifest.json" },
       {
@@ -75,7 +75,7 @@ export const SCRIPTS: ScriptDef[] = [
         default: "",
       },
       { kind: "number", name: "limit", label: "Лимит", min: 1, placeholder: "без ограничения" },
-      { kind: "string", name: "progress-file", label: "Файл прогресса", placeholder: ".seed-progress.json" },
+      { kind: "boolean", name: "reset-progress", label: "Сбросить .seed-progress.json", default: false },
       { kind: "boolean", name: "dry-run", label: "Dry run (не POST-ить)", default: false },
     ],
     toArgv: (v) => {
@@ -86,8 +86,7 @@ export const SCRIPTS: ScriptDef[] = [
       if (category) argv.push("--category", category);
       const limit = num(v.limit);
       if (limit !== null) argv.push("--limit", String(limit));
-      const progressFile = str(v["progress-file"]);
-      if (progressFile) argv.push("--progress-file", progressFile);
+      if (v["reset-progress"] === true) argv.push("--reset-progress");
       if (v["dry-run"] === true) argv.push("--dry-run");
       return argv;
     },

@@ -46,3 +46,6 @@ __pycache__/
 *.py[cod]
 .venv/
 modal_app/*.log
+
+# playwright MCP cache (smoke tests)
+.playwright-mcp/

@@ -33,7 +33,6 @@ export const config = {
   prodUrl: read("PROD_URL", "http://localhost:8788"),
   adminUser: read("ADMIN_USER", "admin"),
   adminPassword: read("ADMIN_PASSWORD", ""),
-  facenetModelPath: read("FACENET_MODEL_PATH", "./models/mobilefacenet.onnx"),
   yunetModelPath: read("YUNET_MODEL_PATH", "./models/yunet.onnx"),
   lmBaseUrl: read("LM_BASE_URL", "http://127.0.0.1:1234/v1"),
   lmApiKey: read("LM_API_KEY", "lmstudio"),

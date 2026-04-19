@@ -521,7 +521,6 @@
           ["LM_BASE_URL", report.lmBaseUrl.value, report.lmBaseUrl.reachable ? "доступен" : "недоступен", report.lmBaseUrl.reachable],
           ["LM_MODEL", report.lmModel.value, "", null],
           ["LM_API_KEY", report.lmApiKey.set ? "установлен" : "не установлен", "", report.lmApiKey.set],
-          ["FACENET_MODEL", report.facenetModel.path, report.facenetModel.exists ? "найден" : "отсутствует", report.facenetModel.exists],
           ["YUNET_MODEL", report.yunetModel.path, report.yunetModel.exists ? "найден" : "отсутствует", report.yunetModel.exists],
           [".env.local", report.envFile.path, report.envFile.exists ? "найден" : "отсутствует", report.envFile.exists],
           ["SEED_OUT_DIR", report.seedOutDir.path, report.seedOutDir.exists ? "существует" : "нет", report.seedOutDir.exists],

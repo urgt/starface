@@ -111,7 +111,17 @@ def main() -> None:
     parser.add_argument("--manifest", help="Path to manifest.json")
     parser.add_argument("--category")
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--progress-file", default=".seed-progress.json")
+    parser.add_argument(
+        "--progress-file",
+        default=str(HERE / ".seed-progress.json"),
+        help="Resume marker. Default lives inside scripts/seed/py/ (gitignored).",
+    )
+    parser.add_argument(
+        "--reset-progress",
+        action="store_true",
+        help="Drop the progress file before starting. Use after a dry-run so "
+        "previously-skipped entries are re-tried.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -136,6 +146,9 @@ def main() -> None:
         entries = entries[: args.limit]
 
     progress_path = Path(args.progress_file)
+    if args.reset_progress and progress_path.exists():
+        progress_path.unlink()
+        print(f"[enroll] reset {progress_path}")
     progress = _load_progress(progress_path)
     done_keys = set(progress["done"])
     remaining = [e for e in entries if (e.get("wikidataId") or e["name"]) not in done_keys]
@@ -192,6 +205,14 @@ def main() -> None:
                         "embedding": result.embedding,
                         "detScore": result.det_score,
                         "faceQuality": result.face_quality,
+                        "blurScore": result.blur_score,
+                        "frontalScore": result.frontal_score,
+                        "overallScore": round(
+                            0.5 * (1.0 - result.blur_score)
+                            + 0.3 * result.frontal_score
+                            + 0.2 * result.det_score,
+                            4,
+                        ),
                         "isPrimary": True,
                         "source": "wikidata",
                         "sourceUrl": entry.get("imageUrl"),
@@ -201,7 +222,8 @@ def main() -> None:
         )
         print(
             f"  [{idx}/{len(remaining)}] ✓ {entry['name']} "
-            f"(quality={result.face_quality}, det={result.det_score:.2f})"
+            f"(q={result.face_quality}, det={result.det_score:.2f}, "
+            f"blur={result.blur_score:.2f}, frontal={result.frontal_score:.2f})"
         )
 
         if len(batch) >= BATCH_SIZE:

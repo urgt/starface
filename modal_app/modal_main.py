@@ -105,6 +105,8 @@ class Inference:
                 "bbox": list(result.bbox),
                 "detScore": result.det_score,
                 "faceQuality": result.face_quality,
+                "blurScore": result.blur_score,
+                "frontalScore": result.frontal_score,
                 "sex": result.sex,
                 "age": result.age,
             }

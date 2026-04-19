@@ -86,6 +86,8 @@ class EmbedResult:
     bbox: tuple[float, float, float, float]
     det_score: float
     face_quality: str
+    blur_score: float
+    frontal_score: float
     sex: str | None
     age: int | None
 
@@ -273,6 +275,49 @@ def embed(crop: Image.Image) -> np.ndarray:
     return cls.cpu().numpy().reshape(-1).astype(np.float32)
 
 
+_LAPLACIAN_KERNEL = np.array(
+    [[0.0, 1.0, 0.0], [1.0, -4.0, 1.0], [0.0, 1.0, 0.0]], dtype=np.float32
+)
+
+
+def blur_score(crop: Image.Image) -> float:
+    """Laplacian variance on the aligned grayscale face. 0 = sharp, 1 = blurry."""
+    gray = np.asarray(crop.convert("L"), dtype=np.float32)
+    # 2D convolution via reflect-padded slicing — no scipy dependency.
+    padded = np.pad(gray, 1, mode="reflect")
+    lap = (
+        _LAPLACIAN_KERNEL[1, 1] * padded[1:-1, 1:-1]
+        + _LAPLACIAN_KERNEL[0, 1] * padded[0:-2, 1:-1]
+        + _LAPLACIAN_KERNEL[2, 1] * padded[2:, 1:-1]
+        + _LAPLACIAN_KERNEL[1, 0] * padded[1:-1, 0:-2]
+        + _LAPLACIAN_KERNEL[1, 2] * padded[1:-1, 2:]
+    )
+    variance = float(lap.var())
+    # variance typically 500+ on sharp faces, <100 on soft/out-of-focus.
+    return float(max(0.0, min(1.0, 1.0 - variance / 300.0)))
+
+
+def frontal_score(keypoints: np.ndarray) -> float:
+    """0 = extreme tilt / profile, 1 = perfectly frontal."""
+    if not np.any(keypoints) or keypoints.shape[0] < 5:
+        return 1.0
+    left_eye, right_eye, nose, left_mouth, right_mouth = keypoints[:5]
+    # Eye-line tilt penalty
+    dx, dy = right_eye[0] - left_eye[0], right_eye[1] - left_eye[1]
+    tilt = abs(np.arctan2(dy, dx))  # radians
+    tilt_score = float(max(0.0, 1.0 - tilt / (np.pi / 4)))  # > 45° → 0
+    # Horizontal symmetry of eyes + mouth around nose (yaw proxy)
+    eye_symmetry = (
+        (nose[0] - left_eye[0]) - (right_eye[0] - nose[0])
+    ) / max(1.0, right_eye[0] - left_eye[0])
+    mouth_symmetry = (
+        (nose[0] - left_mouth[0]) - (right_mouth[0] - nose[0])
+    ) / max(1.0, right_mouth[0] - left_mouth[0])
+    yaw = (abs(eye_symmetry) + abs(mouth_symmetry)) / 2
+    yaw_score = float(max(0.0, 1.0 - min(1.0, yaw * 2.0)))
+    return float(max(0.0, min(1.0, tilt_score * 0.5 + yaw_score * 0.5)))
+
+
 def predict_attrs(_crop: Image.Image) -> tuple[str | None, int | None]:
     """Gender / age prediction. Returns (sex, age) or (None, None).
 
@@ -304,6 +349,8 @@ def process(image_bytes: bytes) -> EmbedResult:
         raise FaceEmbedError("internal", f"unexpected_dim_{vector.shape[0]}")
 
     sex, age = predict_attrs(crop)
+    blur = blur_score(crop)
+    frontal = frontal_score(detection.keypoints)
 
     _, _, bw, bh = detection.bbox
     face_quality = "high" if min(bw, bh) >= 96 and detection.score >= 0.85 else "medium"
@@ -313,9 +360,14 @@ def process(image_bytes: bytes) -> EmbedResult:
         bbox=detection.bbox,
         det_score=detection.score,
         face_quality=face_quality,
+        blur_score=blur,
+        frontal_score=frontal,
         sex=sex,
         age=age,
     )
+
+
+BURST_CONSISTENCY_THRESHOLD = 0.85
 
 
 def process_burst(images: list[bytes]) -> EmbedResult:
@@ -329,6 +381,17 @@ def process_burst(images: list[bytes]) -> EmbedResult:
     if not results:
         raise last_error or FaceEmbedError("no_face")
 
+    # Reject bursts where the user moved / lighting changed mid-capture —
+    # averaging inconsistent embeddings just smears identity.
+    if len(results) >= 2:
+        vectors = [np.asarray(r.embedding, dtype=np.float32) for r in results]
+        min_pair_cos = 1.0
+        for i in range(len(vectors)):
+            for j in range(i + 1, len(vectors)):
+                min_pair_cos = min(min_pair_cos, float(np.dot(vectors[i], vectors[j])))
+        if min_pair_cos < BURST_CONSISTENCY_THRESHOLD:
+            raise FaceEmbedError("burst_inconsistent")
+
     summed = np.zeros(EMBEDDING_DIM, dtype=np.float32)
     for r in results:
         summed += np.asarray(r.embedding, dtype=np.float32)
@@ -340,11 +403,15 @@ def process_burst(images: list[bytes]) -> EmbedResult:
     face_quality = (
         "high" if all(r.face_quality == "high" for r in results) else "medium"
     )
+    mean_blur = float(np.mean([r.blur_score for r in results]))
+    mean_frontal = float(np.mean([r.frontal_score for r in results]))
     return EmbedResult(
         embedding=summed.tolist(),
         bbox=best.bbox,
         det_score=best.det_score,
         face_quality=face_quality,
+        blur_score=mean_blur,
+        frontal_score=mean_frontal,
         sex=best.sex,
         age=best.age,
     )

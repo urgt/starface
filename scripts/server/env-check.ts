@@ -32,18 +32,16 @@ export type EnvReport = {
   adminUser: { value: string };
   adminPassword: { set: boolean };
   lmApiKey: { set: boolean };
-  facenetModel: { path: string; exists: boolean };
   yunetModel: { path: string; exists: boolean };
   seedOutDir: { path: string; exists: boolean };
   progressFile: { path: string; exists: boolean };
 };
 
 export async function buildEnvReport(): Promise<EnvReport> {
-  const facenetPath = absPath(config.facenetModelPath);
   const yunetPath = absPath(config.yunetModelPath);
   const seedDir = absPath(config.seedOutDir);
   const envFile = resolve(SCRIPTS_DIR, ".env.local");
-  const progressFile = resolve(SCRIPTS_DIR, ".seed-progress.json");
+  const progressFile = resolve(SCRIPTS_DIR, "seed/py/.seed-progress.json");
 
   const [prodReachable, lmReachable] = await Promise.all([
     pingUrl(config.prodUrl, "GET"),
@@ -58,7 +56,6 @@ export async function buildEnvReport(): Promise<EnvReport> {
     adminUser: { value: config.adminUser },
     adminPassword: { set: config.adminPassword.length > 0 },
     lmApiKey: { set: config.lmApiKey.length > 0 },
-    facenetModel: { path: facenetPath, exists: existsSync(facenetPath) },
     yunetModel: { path: yunetPath, exists: existsSync(yunetPath) },
     seedOutDir: { path: seedDir, exists: existsSync(seedDir) },
     progressFile: { path: progressFile, exists: existsSync(progressFile) },
