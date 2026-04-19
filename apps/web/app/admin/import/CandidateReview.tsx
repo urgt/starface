@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import type { CandidateRecord, ImportCategory } from "./types";
+import type { CandidateRecord, ImportCategory, QueryMeta } from "./types";
 
 function formatYear(iso: string | null): string {
   if (!iso) return "—";
@@ -21,11 +21,13 @@ function thumbUrl(imageFile: string | null): string | null {
 export function CandidateReview({
   candidates,
   category,
+  meta,
   onBack,
   onStart,
 }: {
   candidates: CandidateRecord[];
   category: ImportCategory;
+  meta: QueryMeta | null;
   onBack: () => void;
   onStart: (selected: CandidateRecord[]) => void;
 }) {
@@ -68,6 +70,18 @@ export function CandidateReview({
           <h2 className="text-lg font-semibold">
             {list.length} candidates · {withImage} with P18 image · category = {category}
           </h2>
+          {meta && (
+            <p className="text-xs text-neutral-500">
+              Requested {meta.requested}, Wikidata returned {meta.fetchedTotal}
+              {meta.skippedExisting > 0 && (
+                <> — {meta.skippedExisting} already in DB (skipped)</>
+              )}
+              {list.length < meta.requested && (
+                <> — only {list.length} new {list.length === 1 ? "person" : "people"} available</>
+              )}
+              .
+            </p>
+          )}
           <p className="text-xs text-neutral-500">
             Writes directly to prod. Deselect rows you don&apos;t want. Candidates without a P18
             image will be skipped at import time.
