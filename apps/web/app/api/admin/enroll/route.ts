@@ -111,16 +111,33 @@ export async function POST(req: Request) {
 
       let celebrityId: string;
       let action: "inserted" | "updated";
+      // Effective gender/age for both D1 + Vectorize metadata. For existing
+      // celebs admin curation wins; for new celebs FairFace fills the blanks.
+      let effectiveGender: "M" | "F" | null = input.gender ?? null;
+      let effectiveAge: number | null = input.age ?? null;
+
       if (existingId) {
         celebrityId = existingId;
+        const [existingRow] = await db
+          .select({
+            gender: schema.celebrities.gender,
+            age: schema.celebrities.age,
+          })
+          .from(schema.celebrities)
+          .where(eq(schema.celebrities.id, celebrityId))
+          .limit(1);
+        effectiveGender =
+          ((existingRow?.gender ?? null) as "M" | "F" | null) ?? input.gender ?? null;
+        effectiveAge = (existingRow?.age ?? null) ?? input.age ?? null;
+
         await db
           .update(schema.celebrities)
           .set({
             name: input.name,
             nameRu: input.nameRu ?? null,
             category: input.category ?? null,
-            gender: input.gender ?? null,
-            age: input.age ?? null,
+            gender: effectiveGender,
+            age: effectiveAge,
             popularity: input.popularity,
             descriptionUz: input.descriptionUz ?? null,
             descriptionRu: input.descriptionRu ?? null,
@@ -201,8 +218,8 @@ export async function POST(req: Request) {
             celebrityId,
             celebrityPhotoId: photoRow.id,
             photoPath: saved.relativePath,
-            gender: input.gender ?? null,
-            age: input.age ?? null,
+            gender: effectiveGender,
+            age: effectiveAge,
             popularity: input.popularity,
             active: true,
           }),

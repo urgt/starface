@@ -29,14 +29,37 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Generate Cloudflare env types
         run: pnpm --filter @starface/web cf-typegen
 
+      - name: Typecheck web
+        run: pnpm --filter @starface/web typecheck
+
+      - name: Typecheck scripts
+        run: pnpm --filter @starface/scripts typecheck
+
+      - name: Python syntax check (modal_app + seed)
+        run: |
+          python -m py_compile modal_app/*.py
+          python -m py_compile scripts/seed/py/*.py
+
       - name: Build
         run: pnpm --filter @starface/web exec opennextjs-cloudflare build
+
+      - name: Apply D1 migrations
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm --filter @starface/web exec wrangler d1 migrations apply starface --remote --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

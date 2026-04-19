@@ -22,7 +22,11 @@ import onnxruntime as ort
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModel
+from transformers import (
+    AutoImageProcessor,
+    AutoModel,
+    AutoModelForImageClassification,
+)
 
 def _env(key: str, default: str) -> str:
     """Read env lazily so callers can set variables after this module imports."""
@@ -31,6 +35,22 @@ def _env(key: str, default: str) -> str:
 
 _DINOV2_DEFAULT = "facebook/dinov2-large"
 _YUNET_DEFAULT = str(Path(__file__).parent / "models" / "yunet.onnx")
+_AGE_MODEL_DEFAULT = "dima806/fairface_age_image_detection"
+_GENDER_MODEL_DEFAULT = "dima806/fairface_gender_image_detection"
+
+# id2label on fairface_age maps bucket → age midpoint (use center of range,
+# 70+ → 75 as a reasonable proxy).
+_AGE_BUCKET_TO_YEARS = {
+    "0-2": 1,
+    "3-9": 6,
+    "10-19": 15,
+    "20-29": 25,
+    "30-39": 35,
+    "40-49": 45,
+    "50-59": 55,
+    "60-69": 65,
+    "more than 70": 75,
+}
 
 
 def _dinov2_name() -> str:
@@ -39,6 +59,14 @@ def _dinov2_name() -> str:
 
 def _yunet_path() -> str:
     return _env("YUNET_MODEL_PATH", _YUNET_DEFAULT)
+
+
+def _age_model_name() -> str:
+    return _env("FAIRFACE_AGE_MODEL", _AGE_MODEL_DEFAULT)
+
+
+def _gender_model_name() -> str:
+    return _env("FAIRFACE_GENDER_MODEL", _GENDER_MODEL_DEFAULT)
 
 EMBEDDING_DIM = 1024
 YUNET_INPUT = 640
@@ -115,10 +143,26 @@ def _dinov2() -> tuple[AutoImageProcessor, AutoModel, torch.device]:
     return processor, model, device
 
 
+@lru_cache(maxsize=2)
+def _fairface_classifier(
+    name: str,
+) -> tuple[AutoImageProcessor, AutoModelForImageClassification, torch.device]:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    processor = AutoImageProcessor.from_pretrained(name)
+    model = AutoModelForImageClassification.from_pretrained(name).to(device).eval()
+    return processor, model, device
+
+
 def warm() -> None:
     """Best-effort warm-up; call from @modal.enter()."""
     _yunet()
     _dinov2()
+    try:
+        _fairface_classifier(_age_model_name())
+        _fairface_classifier(_gender_model_name())
+    except Exception as exc:
+        # Attribute heads are optional — log and continue.
+        print(f"fairface warm failed: {exc}")
 
 
 def _letterbox(image: Image.Image, size: int) -> tuple[np.ndarray, float]:
@@ -318,14 +362,33 @@ def frontal_score(keypoints: np.ndarray) -> float:
     return float(max(0.0, min(1.0, tilt_score * 0.5 + yaw_score * 0.5)))
 
 
-def predict_attrs(_crop: Image.Image) -> tuple[str | None, int | None]:
-    """Gender / age prediction. Returns (sex, age) or (None, None).
+def _run_fairface(crop: Image.Image, name: str) -> dict[str, float]:
+    processor, model, device = _fairface_classifier(name)
+    inputs = processor(images=crop, return_tensors="pt").to(device)
+    with torch.no_grad():
+        logits = model(**inputs).logits
+    probs = F.softmax(logits, dim=1)[0].cpu().numpy()
+    labels = model.config.id2label
+    return {labels[i]: float(probs[i]) for i in range(len(probs))}
 
-    Stub for now. Wire a commercial-safe classifier (FairFace res34 weights, CC-BY
-    4.0) here without touching the rest of the pipeline. Until then, the kiosk
-    sends null → existing rerank in /api/match falls through gracefully.
+
+def predict_attrs(crop: Image.Image) -> tuple[str | None, int | None]:
+    """Gender / age prediction via FairFace ViT classifiers (Apache 2.0).
+
+    Returns (None, None) if the models fail to load or infer — rerank in
+    /api/match falls through gracefully on null inputs.
     """
-    return None, None
+    try:
+        gender = _run_fairface(crop, _gender_model_name())
+        age = _run_fairface(crop, _age_model_name())
+    except Exception as exc:
+        print(f"predict_attrs failed: {exc}")
+        return None, None
+
+    sex = "M" if gender.get("Male", 0) >= gender.get("Female", 0) else "F"
+    top_bucket = max(age, key=age.get)
+    years = _AGE_BUCKET_TO_YEARS.get(top_bucket)
+    return sex, years
 
 
 def process(image_bytes: bytes) -> EmbedResult:
