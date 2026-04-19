@@ -19,6 +19,7 @@ export const maxDuration = 30;
 const bodySchema = z.object({
   languages: z.array(z.enum(["uz", "ru", "en"])).min(1).max(3).optional(),
   skipWikipedia: z.boolean().optional(),
+  save: z.boolean().optional(),
 });
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -155,5 +156,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  return NextResponse.json({ ...result.descriptions, source, model, latencyMs });
+  let saved = false;
+  if (body.save) {
+    const update: Partial<{
+      descriptionUz: string;
+      descriptionRu: string;
+      descriptionEn: string;
+    }> = {};
+    if (result.descriptions.uz) update.descriptionUz = result.descriptions.uz;
+    if (result.descriptions.ru) update.descriptionRu = result.descriptions.ru;
+    if (result.descriptions.en) update.descriptionEn = result.descriptions.en;
+    if (Object.keys(update).length > 0) {
+      await db.update(schema.celebrities).set(update).where(eq(schema.celebrities.id, celeb.id));
+      saved = true;
+    }
+  }
+
+  return NextResponse.json({ ...result.descriptions, source, model, latencyMs, saved });
 }

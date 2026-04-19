@@ -200,7 +200,7 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
       const res = await fetch(`/api/admin/celebrities/${id}/generate-description`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ save: true }),
         signal,
       });
       if (!res.ok) {
@@ -208,10 +208,9 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
           error?: string;
           detail?: string;
         };
-        return {
-          kind: "error",
-          message: data.detail ?? data.error ?? `HTTP ${res.status}`,
-        };
+        const msg = data.detail ?? data.error ?? `HTTP ${res.status}`;
+        console.error("regenerate-description failed", { celebrityId: id, msg });
+        return { kind: "error", message: msg };
       }
       return { kind: "done" };
     });

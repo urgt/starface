@@ -54,29 +54,33 @@ type UploadPhoto = {
   sourceUrl: string;
 };
 
+type CandidateRejection = { ok: false; reason: string };
+
 async function processCandidate(
   candidate: PhotoCandidate,
   primaryEmbedding: number[],
   signal: AbortSignal,
-): Promise<{ ok: true; photo: UploadPhoto } | { ok: false }> {
+): Promise<{ ok: true; photo: UploadPhoto } | CandidateRejection> {
   const imgRes = await fetch(
     `/api/admin/fetch-image?url=${encodeURIComponent(candidate.fullUrl)}`,
     { signal },
   );
-  if (!imgRes.ok) return { ok: false };
+  if (!imgRes.ok) return { ok: false, reason: `fetch-image HTTP ${imgRes.status}` };
   const blob = await imgRes.blob();
 
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(blob);
-  } catch {
-    return { ok: false };
+  } catch (e) {
+    return { ok: false, reason: `bitmap ${(e as Error).message}` };
   }
 
   try {
     const result = await detectAndEmbed(bitmap);
     const similarity = cosine(result.embedding, primaryEmbedding);
-    if (similarity < BULK_PHOTO_SIMILARITY) return { ok: false };
+    if (similarity < BULK_PHOTO_SIMILARITY) {
+      return { ok: false, reason: `cosine ${similarity.toFixed(3)}<${BULK_PHOTO_SIMILARITY}` };
+    }
 
     const file = new File([blob], candidate.fileName, { type: blob.type });
     const imageBase64 = await readFileAsBase64(file);
@@ -94,7 +98,7 @@ async function processCandidate(
       },
     };
   } catch (e) {
-    if (e instanceof FaceEmbedError) return { ok: false };
+    if (e instanceof FaceEmbedError) return { ok: false, reason: `embed ${e.code}` };
     throw e;
   } finally {
     bitmap.close();
@@ -125,19 +129,22 @@ export async function findPhotosForCeleb(
   }
 
   const accepted: UploadPhoto[] = [];
+  const rejections: Array<{ url: string; reason: string }> = [];
   for (const candidate of data.candidates) {
     if (signal.aborted) throw new DOMException("aborted", "AbortError");
     if (accepted.length >= slotsLeft) break;
     try {
       const out = await processCandidate(candidate, data.primaryEmbedding, signal);
       if (out.ok) accepted.push(out.photo);
+      else rejections.push({ url: candidate.sourceUrl, reason: out.reason });
     } catch (e) {
       if ((e as Error).name === "AbortError") throw e;
-      // non-abort candidate-level errors are swallowed; keep trying others
+      rejections.push({ url: candidate.sourceUrl, reason: (e as Error).message });
     }
   }
 
   if (accepted.length === 0) {
+    console.warn("find-photos: no candidates accepted", { celebrityId, rejections });
     return { kind: "skipped", reason: "no identity match" };
   }
 
@@ -149,11 +156,21 @@ export async function findPhotosForCeleb(
   });
   if (!uploadRes.ok) {
     const body = (await uploadRes.json().catch(() => ({}))) as { error?: string };
-    return {
-      kind: "error",
-      message: body.error ?? `upload HTTP ${uploadRes.status}`,
-    };
+    const message = body.error ?? `upload HTTP ${uploadRes.status}`;
+    console.error("find-photos: upload failed", { celebrityId, message });
+    return { kind: "error", message };
   }
-
-  return { kind: "added", count: accepted.length };
+  const uploadBody = (await uploadRes.json().catch(() => ({ results: [] }))) as {
+    results: Array<{ status: "ok" | "error"; error?: string }>;
+  };
+  const okCount = uploadBody.results.filter((r) => r.status === "ok").length;
+  if (okCount === 0) {
+    const errs = uploadBody.results.map((r) => r.error).filter(Boolean);
+    console.error("find-photos: all per-photo inserts failed", {
+      celebrityId,
+      errors: errs,
+    });
+    return { kind: "error", message: errs[0] ?? "all_inserts_failed" };
+  }
+  return { kind: "added", count: okCount };
 }
