@@ -12,6 +12,7 @@ export const maxDuration = 60;
 const OVERFETCH_FACTOR = 3;
 const OVERFETCH_HARD_CAP = 1000;
 const USER_LIMIT_MAX = 500;
+const D1_IN_CHUNK = 80;
 
 const bodySchema = z
   .object({
@@ -59,13 +60,15 @@ export async function POST(req: Request) {
   let filtered = raw;
   if (raw.length) {
     const qids = raw.map((c) => c.qid);
-    const existing = await db
-      .select({ wikidataId: schema.celebrities.wikidataId })
-      .from(schema.celebrities)
-      .where(inArray(schema.celebrities.wikidataId, qids));
-    const existingSet = new Set(
-      existing.map((r) => r.wikidataId).filter((v): v is string => !!v),
-    );
+    const existingSet = new Set<string>();
+    for (let i = 0; i < qids.length; i += D1_IN_CHUNK) {
+      const chunk = qids.slice(i, i + D1_IN_CHUNK);
+      const rows = await db
+        .select({ wikidataId: schema.celebrities.wikidataId })
+        .from(schema.celebrities)
+        .where(inArray(schema.celebrities.wikidataId, chunk));
+      for (const r of rows) if (r.wikidataId) existingSet.add(r.wikidataId);
+    }
     filtered = raw.filter((c) => !existingSet.has(c.qid));
     skippedExisting = raw.length - filtered.length;
   }
