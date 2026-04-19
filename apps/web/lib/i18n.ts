@@ -25,6 +25,8 @@ export const dict: Record<Locale, Dict> = {
     promo: "Do'konimizdan promokod",
     tryAgain: "Yana bir bor urinish",
     resultExpired: "Natija muddati tugagan",
+    resultNotFoundTitle: "Natija topilmadi",
+    resultNotFoundBody: "Havola eskirgan yoki natija o'chirilgan. Kioskda yangi suratga tushing.",
     brandLogoAlt: "Brend logotipi",
     demoBadge: "Namuna natija",
     demoHint: "Bu haqiqiy mijoz natijasiga o'xshash ko'rinish",
@@ -51,6 +53,8 @@ export const dict: Record<Locale, Dict> = {
     promo: "Промокод от магазина",
     tryAgain: "Попробовать ещё раз",
     resultExpired: "Срок действия результата истёк",
+    resultNotFoundTitle: "Результат не найден",
+    resultNotFoundBody: "Ссылка устарела или результат удалён. Сделайте новое фото на киоске.",
     brandLogoAlt: "Логотип бренда",
     demoBadge: "Пример результата",
     demoHint: "Так выглядит результат настоящего гостя",
@@ -79,6 +83,8 @@ export type Dict = {
   promo: string;
   tryAgain: string;
   resultExpired: string;
+  resultNotFoundTitle: string;
+  resultNotFoundBody: string;
   brandLogoAlt: string;
   demoBadge: string;
   demoHint: string;

@@ -50,11 +50,14 @@ export function ResultCard({ data, brand, locale }: Props) {
   const ctaUrl = brand.ctaUrl;
 
   return (
-    <div className="relative min-h-screen bg-brand-gradient font-brand text-white" style={cssVars}>
+    <div
+      className="relative min-h-[100dvh] bg-brand-gradient font-brand text-white"
+      style={cssVars}
+    >
       {/* ambient glow — kept small so mobile GPUs don't churn on a huge blur layer */}
       <div className="pointer-events-none absolute -top-16 left-1/2 h-[200px] w-[320px] -translate-x-1/2 rounded-full bg-[var(--brand-primary)]/15 blur-2xl" />
 
-      <div className="relative mx-auto max-w-md px-5 py-8 md:max-w-lg">
+      <div className="relative mx-auto w-full max-w-[min(94vw,28rem)] px-5 py-8 md:max-w-[min(88vw,40rem)] lg:max-w-[min(72vw,48rem)] lg:px-8 lg:py-12">
         {/* top brand row */}
         <header className="flex items-center justify-between">
           {brand.logoUrl ? (
@@ -83,7 +86,7 @@ export function ResultCard({ data, brand, locale }: Props) {
 
         {/* Photo showcase */}
         <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-3xl border border-white/10 bg-black/40 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]">
-          <div className="relative aspect-square">
+          <div className="relative aspect-square lg:aspect-[4/5]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={data.userPhotoUrl}
@@ -91,11 +94,11 @@ export function ResultCard({ data, brand, locale }: Props) {
               className="h-full w-full object-cover scale-x-[-1]"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-            <div className="absolute bottom-3 left-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+            <div className="absolute bottom-3 left-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 md:text-sm">
               {locale === "ru" ? "Вы" : "Siz"}
             </div>
           </div>
-          <div className="relative aspect-square border-l border-white/10">
+          <div className="relative aspect-square border-l border-white/10 lg:aspect-[4/5]">
             {data.celebrity.photoUrl && (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -105,7 +108,7 @@ export function ResultCard({ data, brand, locale }: Props) {
               />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-            <div className="absolute bottom-3 right-3 max-w-[85%] text-right text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+            <div className="absolute bottom-3 right-3 max-w-[85%] text-right text-xs font-semibold uppercase tracking-[0.2em] text-white/80 md:text-sm">
               {celebName}
             </div>
           </div>
@@ -118,16 +121,18 @@ export function ResultCard({ data, brand, locale }: Props) {
             {dict.match}
           </div>
           <div
-            className="mt-2 font-brand font-black leading-none text-[var(--brand-primary)]"
-            style={{ fontSize: "clamp(3rem, 18vw, 6rem)" }}
+            className="mt-2 font-brand font-black leading-none text-[var(--brand-primary)] tabular-nums"
+            style={{ fontSize: "clamp(3.5rem, 22vw, 9rem)" }}
           >
             {data.similarity}
-            <span className="text-2xl md:text-4xl">%</span>
+            <span style={{ fontSize: "40%" }}>%</span>
           </div>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/50">{dict.similarity}</p>
-          <p className="mt-4 text-2xl font-bold text-white">{celebName}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/50 md:text-sm">
+            {dict.similarity}
+          </p>
+          <p className="mt-4 text-2xl font-bold text-white md:text-3xl lg:text-4xl">{celebName}</p>
           {description && (
-            <p className="mt-3 text-base leading-snug text-white/75">{description}</p>
+            <p className="mt-3 text-base leading-snug text-white/75 md:text-lg">{description}</p>
           )}
         </div>
 

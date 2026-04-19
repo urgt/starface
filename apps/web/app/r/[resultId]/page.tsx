@@ -121,8 +121,14 @@ export default async function ResultPage({
 
   if (result.expires_at.getTime() < Date.now()) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-neutral-950 p-6 text-center">
-        <p className="text-xl text-neutral-300">{dict.resultExpired}</p>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-brand-gradient p-6 font-brand">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-black/40 p-8 text-center text-white shadow-2xl backdrop-blur">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-primary)]/20 text-2xl">
+            ⏱
+          </div>
+          <h1 className="text-2xl font-bold">{dict.resultExpired}</h1>
+          <p className="mt-2 text-sm text-white/70">{dict.resultNotFoundBody}</p>
+        </div>
       </div>
     );
   }

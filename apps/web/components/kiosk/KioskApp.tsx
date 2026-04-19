@@ -8,7 +8,6 @@ import { embedBurst, FaceEmbedError } from "@/lib/face-embed";
 import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { GestureCamera, type GestureCameraHandle } from "./GestureCamera";
 import { IdleScreen } from "./IdleScreen";
-import { LocaleToggle } from "./LocaleToggle";
 import { RevealScreen, type RevealPayload } from "./RevealScreen";
 
 type Props = {
@@ -127,17 +126,17 @@ export function KioskApp({ brand, appUrl }: Props) {
 
   return (
     <div
-      className="relative h-screen w-screen overflow-hidden bg-brand-gradient-soft font-brand"
+      className="relative h-[100dvh] w-[100dvw] overflow-hidden bg-brand-gradient-soft font-brand"
       style={cssVars}
     >
-      <div className="absolute right-6 top-6 z-30">
-        <LocaleToggle locale={locale} onChange={setLocale} />
-      </div>
-
       {/* Idle screen: mosaic + headline, corner camera on top */}
       {phase === "idle" && (
         <div className="absolute inset-0">
-          <IdleScreen brand={brand} locale={locale} />
+          <IdleScreen
+            brand={brand}
+            locale={locale}
+            onLocaleChange={setLocale}
+          />
         </div>
       )}
 
@@ -155,6 +154,7 @@ export function KioskApp({ brand, appUrl }: Props) {
         <RevealScreen
           payload={reveal}
           locale={locale}
+          onLocaleChange={setLocale}
           brand={brand}
           appUrl={appUrl}
           onReset={resetToIdle}
@@ -162,10 +162,17 @@ export function KioskApp({ brand, appUrl }: Props) {
       )}
 
       {phase === "error" && errorMessage && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/85 backdrop-blur-sm">
-          <div className="max-w-xl rounded-3xl border border-white/10 bg-neutral-900/80 p-10 text-center shadow-2xl">
-            <p className="text-2xl font-semibold text-red-300">{errorMessage}</p>
-            <p className="mt-2 text-neutral-500">Возврат к заставке...</p>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm">
+          <div
+            className="w-full rounded-3xl border border-white/10 bg-neutral-900/80 p-[var(--kiosk-pad)] text-center shadow-2xl"
+            style={{ maxWidth: "min(90vw, 40rem)" }}
+          >
+            <p className="font-semibold text-red-300" style={{ fontSize: "var(--kiosk-text-xl)" }}>
+              {errorMessage}
+            </p>
+            <p className="mt-2 text-neutral-500" style={{ fontSize: "var(--kiosk-text-sm)" }}>
+              Возврат к заставке...
+            </p>
           </div>
         </div>
       )}

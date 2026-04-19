@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { BrandTheme } from "@/lib/brand-theme";
+import { LocaleToggle } from "./LocaleToggle";
 
 export type RevealAlternative = {
   celebrityId: string;
@@ -34,6 +35,7 @@ export type RevealPayload = {
 type Props = {
   payload: RevealPayload;
   locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
   brand: BrandTheme;
   appUrl: string;
   idleSeconds?: number;
@@ -44,7 +46,15 @@ const SCAN_MS = 600;
 const CROSSFADE_MS = 900;
 const COUNTUP_MS = 1500;
 
-export function RevealScreen({ payload, locale, brand, appUrl, idleSeconds = 20, onReset }: Props) {
+export function RevealScreen({
+  payload,
+  locale,
+  onLocaleChange,
+  brand,
+  appUrl,
+  idleSeconds = 20,
+  onReset,
+}: Props) {
   const dict = t(locale);
   const [idleLeft, setIdleLeft] = useState(idleSeconds);
   const [stage, setStage] = useState<"scan" | "crossfade" | "done">("scan");
@@ -102,19 +112,43 @@ export function RevealScreen({ payload, locale, brand, appUrl, idleSeconds = 20,
 
   return (
     <div className="absolute inset-0 z-20 flex h-full w-full flex-col bg-brand-gradient font-brand">
-      {/* Top badge */}
-      <div className="relative z-10 flex items-center justify-between px-4 pt-4 tv:px-8 tv:pt-6 tv-hd:px-10 tv-hd:pt-8">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--brand-primary)]/40 bg-[var(--brand-primary)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--brand-primary)] tv:px-4 tv:py-1.5 tv:tracking-[0.25em] tv:text-[11px]">
+      {/* Top bar: match badge + countdown + locale */}
+      <header
+        className="relative z-10 flex items-center justify-between"
+        style={{
+          gap: "var(--kiosk-gap)",
+          paddingInline: "var(--kiosk-pad)",
+          paddingTop: "var(--kiosk-pad)",
+        }}
+      >
+        <span
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--brand-primary)]/40 bg-[var(--brand-primary)]/10 font-semibold uppercase tracking-[0.25em] text-[var(--brand-primary)]"
+          style={{
+            paddingInline: "clamp(0.75rem, 1.1vw, 1.25rem)",
+            paddingBlock: "clamp(0.3rem, 0.5vw, 0.55rem)",
+            fontSize: "var(--kiosk-badge-text)",
+          }}
+        >
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--brand-primary)]" />
           {dict.match}
         </span>
-        <span className="text-[10px] text-white/40 tv:text-xs">
-          {idleLeft} {dict.secondsLeft}
-        </span>
-      </div>
+        <div className="flex items-center" style={{ gap: "var(--kiosk-gap)" }}>
+          <span className="text-white/40" style={{ fontSize: "var(--kiosk-text-xs)" }}>
+            {idleLeft} {dict.secondsLeft}
+          </span>
+          <LocaleToggle locale={locale} onChange={onLocaleChange} />
+        </div>
+      </header>
 
-      {/* Photo showcase: stacked on narrow screens, side-by-side on TV */}
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 px-4 pt-3 tv:gap-6 tv:px-8 tv:pt-6 tv-hd:px-10">
+      {/* Photo showcase: always 2 columns — squeezes gracefully via object-cover */}
+      <div
+        className="grid min-h-0 flex-1 grid-cols-2"
+        style={{
+          gap: "var(--kiosk-gap)",
+          paddingInline: "var(--kiosk-pad)",
+          paddingTop: "var(--kiosk-gap)",
+        }}
+      >
         <PhotoPanel
           src={payload.userPhotoUrl}
           label={locale === "ru" ? "Вы" : "Siz"}
@@ -131,19 +165,37 @@ export function RevealScreen({ payload, locale, brand, appUrl, idleSeconds = 20,
       {/* Top-3 mini-carousel */}
       {alternatives.length > 0 && (
         <div
-          className="px-4 pt-3 tv:px-8 tv:pt-4 tv-hd:px-10 transition-opacity duration-500"
-          style={{ opacity: stage === "done" ? 1 : 0 }}
+          className="transition-opacity duration-500"
+          style={{
+            opacity: stage === "done" ? 1 : 0,
+            paddingInline: "var(--kiosk-pad)",
+            paddingTop: "calc(var(--kiosk-gap) * 0.75)",
+          }}
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
+          <p
+            className="font-semibold uppercase tracking-[0.3em] text-white/40"
+            style={{ fontSize: "var(--kiosk-badge-text)" }}
+          >
             {locale === "ru" ? "Ты также похож на" : "Shuningdek o'xshaysiz"}
           </p>
-          <div className="mt-2 flex items-center gap-2 overflow-x-auto tv:gap-3">
+          <div
+            className="flex items-center overflow-x-auto"
+            style={{
+              gap: "calc(var(--kiosk-gap) * 0.6)",
+              marginTop: "calc(var(--kiosk-gap) * 0.5)",
+            }}
+          >
             {alternatives.map((alt) => {
               const altName = locale === "ru" ? alt.nameRu ?? alt.name : alt.name;
               return (
                 <div
                   key={alt.celebrityId}
-                  className="flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5 tv:gap-3 tv:px-3 tv:py-2"
+                  className="flex shrink-0 items-center rounded-2xl border border-white/10 bg-white/5"
+                  style={{
+                    gap: "calc(var(--kiosk-gap) * 0.5)",
+                    paddingInline: "calc(var(--kiosk-gap) * 0.6)",
+                    paddingBlock: "calc(var(--kiosk-gap) * 0.35)",
+                  }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -151,13 +203,23 @@ export function RevealScreen({ payload, locale, brand, appUrl, idleSeconds = 20,
                     alt={altName}
                     loading="lazy"
                     decoding="async"
-                    className="h-9 w-9 rounded-xl object-cover tv:h-12 tv:w-12"
+                    className="rounded-xl object-cover"
+                    style={{
+                      width: "clamp(2.25rem, 3vw, 3.5rem)",
+                      height: "clamp(2.25rem, 3vw, 3.5rem)",
+                    }}
                   />
-                  <div className="max-w-[140px] tv:max-w-[180px]">
-                    <div className="truncate text-xs font-semibold text-white tv:text-sm">
+                  <div className="max-w-[clamp(120px,14vw,220px)]">
+                    <div
+                      className="truncate font-semibold text-white"
+                      style={{ fontSize: "var(--kiosk-text-sm)" }}
+                    >
                       {altName}
                     </div>
-                    <div className="text-[11px] text-[var(--brand-primary)] tv:text-xs">
+                    <div
+                      className="text-[var(--brand-primary)]"
+                      style={{ fontSize: "var(--kiosk-text-xs)" }}
+                    >
                       {alt.similarity}%
                     </div>
                   </div>
@@ -168,51 +230,81 @@ export function RevealScreen({ payload, locale, brand, appUrl, idleSeconds = 20,
         </div>
       )}
 
-      {/* Footer with match info + QR */}
-      <div className="relative z-10 mt-3 flex shrink-0 flex-col items-start gap-3 border-t border-white/5 bg-black/30 px-4 py-4 tv:mt-6 tv:flex-row tv:items-center tv:justify-between tv:gap-8 tv:px-8 tv:py-6 tv-hd:gap-10 tv-hd:px-10 tv-hd:py-8">
-        <div className="flex items-end gap-4 tv:gap-8">
+      {/* Footer with match info + QR. Grid layout: info | qr on landscape, stacked on narrow. */}
+      <div
+        className="relative z-10 grid shrink-0 items-center border-t border-white/5 bg-black/30"
+        style={{
+          marginTop: "var(--kiosk-gap)",
+          gap: "var(--kiosk-gap)",
+          paddingInline: "var(--kiosk-pad)",
+          paddingBlock: "calc(var(--kiosk-gap) * 1.1)",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+        }}
+      >
+        <div
+          className="flex min-w-0 items-end"
+          style={{ gap: "calc(var(--kiosk-gap) * 1.2)" }}
+        >
           <div
-            className="font-brand font-black leading-none text-[var(--brand-primary)] tabular-nums"
+            className="font-brand font-black leading-[0.9] text-[var(--brand-primary)] tabular-nums"
             style={{
-              fontSize: "clamp(2.5rem, 12vw, 11rem)",
+              fontSize: "var(--kiosk-pct)",
               transform: stage === "done" ? "scale(1.02)" : "scale(1)",
               transition: "transform 220ms cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           >
             {displayedPct}
-            <span className="text-xl tv:text-4xl tv-hd:text-6xl">%</span>
+            <span style={{ fontSize: "40%" }}>%</span>
           </div>
-          <div className="max-w-xl pb-2 tv:pb-4">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/50 tv:text-xs">
+          <div className="min-w-0 flex-1 pb-[0.4em]">
+            <div
+              className="uppercase tracking-[0.22em] text-white/50"
+              style={{ fontSize: "var(--kiosk-badge-text)" }}
+            >
               {dict.similarity}
             </div>
-            <div className="mt-0.5 text-lg font-bold leading-tight text-white tv:mt-1 tv:text-3xl tv-hd:text-4xl">
+            <div
+              className="mt-1 font-bold leading-tight text-white"
+              style={{ fontSize: "var(--kiosk-text-2xl)" }}
+            >
               {celebName}
             </div>
             {description && (
-              <p className="mt-1 line-clamp-2 text-xs text-white/70 tv:mt-2 tv:text-base tv-hd:text-lg">
+              <p
+                className="mt-1 line-clamp-2 text-white/70"
+                style={{ fontSize: "var(--kiosk-text-sm)" }}
+              >
                 {description}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 tv:gap-5">
+        <div
+          className="hidden items-center md:flex"
+          style={{ gap: "calc(var(--kiosk-gap) * 0.8)" }}
+        >
           <div
-            className="rounded-xl bg-white p-2 tv:rounded-2xl tv:p-3"
-            style={{ width: "clamp(112px, 14vw, 184px)" }}
+            className="max-w-[clamp(140px,16vw,260px)]"
+            style={{ fontSize: "var(--kiosk-text-sm)" }}
+          >
+            <p className="font-semibold text-white">{dict.scanQr}</p>
+            <p
+              className="mt-1 truncate text-white/50"
+              style={{ fontSize: "var(--kiosk-text-xs)" }}
+            >
+              {resultUrl.replace(/^https?:\/\//, "")}
+            </p>
+          </div>
+          <div
+            className="rounded-2xl bg-white p-2"
+            style={{ width: "var(--kiosk-qr)" }}
           >
             <QRCodeSVG
               value={resultUrl}
               level="M"
               style={{ width: "100%", height: "auto", display: "block" }}
             />
-          </div>
-          <div className="max-w-[180px] tv:max-w-[220px]">
-            <p className="text-xs font-semibold text-white tv:text-base">{dict.scanQr}</p>
-            <p className="mt-0.5 truncate text-[10px] text-white/50 tv:mt-1 tv:text-xs">
-              {resultUrl.replace(/^https?:\/\//, "")}
-            </p>
           </div>
         </div>
       </div>
@@ -232,7 +324,10 @@ function PhotoPanel({
   align: "left" | "right";
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 tv:rounded-3xl">
+    <div
+      className="relative overflow-hidden border border-white/10 bg-black/40"
+      style={{ borderRadius: "var(--kiosk-radius)" }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -242,9 +337,11 @@ function PhotoPanel({
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
       <div
-        className={`absolute bottom-3 tv:bottom-6 ${
-          align === "right" ? "right-3 tv:right-6 text-right" : "left-3 tv:left-6"
-        } max-w-[70%] text-lg font-semibold text-white tv:text-3xl`}
+        className={`absolute ${align === "right" ? "right-0 text-right" : "left-0"} bottom-0 max-w-[70%] font-semibold text-white`}
+        style={{
+          padding: "calc(var(--kiosk-gap) * 0.85)",
+          fontSize: "var(--kiosk-text-xl)",
+        }}
       >
         {label}
       </div>
@@ -257,9 +354,6 @@ function PhotoPanel({
  *   1. `scan`     — dark background with scan-line sweep (anticipation).
  *   2. `crossfade`— celebrity photo fades in.
  *   3. `done`     — celebrity photo fully opaque, scan layer hidden.
- * The legacy base layer was a 28px CSS-blurred copy of the user selfie.
- * That filter cost ~30-50ms per frame on ARM TVs — the scan-line effect
- * alone carries the anticipation just fine.
  */
 function RevealPanel({
   celebSrc,
@@ -272,8 +366,10 @@ function RevealPanel({
 }) {
   const celebOpacity = stage === "scan" ? 0 : 1;
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/70 tv:rounded-3xl">
-      {/* Flat dark base (was a blurred selfie copy — too expensive for TVs). */}
+    <div
+      className="relative overflow-hidden border border-white/10 bg-black/70"
+      style={{ borderRadius: "var(--kiosk-radius)" }}
+    >
       <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--brand-gradient-from)] to-black" />
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -295,7 +391,13 @@ function RevealPanel({
       )}
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-      <div className="absolute bottom-3 right-3 max-w-[70%] text-right text-lg font-semibold text-white tv:bottom-6 tv:right-6 tv:text-3xl">
+      <div
+        className="absolute bottom-0 right-0 max-w-[70%] text-right font-semibold text-white"
+        style={{
+          padding: "calc(var(--kiosk-gap) * 0.85)",
+          fontSize: "var(--kiosk-text-xl)",
+        }}
+      >
         {label}
       </div>
     </div>

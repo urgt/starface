@@ -5,11 +5,12 @@ import { useEffect, useRef, useState } from "react";
 type Item = { id: string; name: string; photoUrl: string };
 
 type Props = {
-  columns?: number;
   maxItems?: number;
+  /** Overrides the auto-fit layout. Used only by the fallback skeleton. */
+  columns?: number;
 };
 
-export function CelebrityMosaic({ columns = 4, maxItems = 12 }: Props) {
+export function CelebrityMosaic({ maxItems = 12, columns }: Props) {
   const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -45,8 +46,12 @@ export function CelebrityMosaic({ columns = 4, maxItems = 12 }: Props) {
     return () => document.removeEventListener("visibilitychange", apply);
   }, [loaded]);
 
+  const gridTemplate = columns
+    ? `repeat(${columns}, minmax(0, 1fr))`
+    : "repeat(auto-fit, minmax(clamp(140px, 16vw, 280px), 1fr))";
+
   if (!loaded || items.length === 0) {
-    return <MosaicFallback columns={columns} />;
+    return <MosaicFallback gridTemplate={gridTemplate} />;
   }
 
   // Duplicate items so the CSS mosaicScroll animation loops seamlessly (translateY -50%)
@@ -56,8 +61,12 @@ export function CelebrityMosaic({ columns = 4, maxItems = 12 }: Props) {
     <div className="absolute inset-0 overflow-hidden">
       <div
         ref={scrollerRef}
-        className="grid h-[200%] w-full gap-2 p-2 animate-mosaic-scroll tv:gap-3 tv:p-3"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        className="grid h-[200%] w-full animate-mosaic-scroll"
+        style={{
+          gridTemplateColumns: gridTemplate,
+          gap: "var(--kiosk-gap)",
+          padding: "calc(var(--kiosk-gap) * 0.5)",
+        }}
       >
         {loop.map((item, i) => (
           <MosaicTile key={`${item.id}-${i}`} item={item} />
@@ -69,7 +78,10 @@ export function CelebrityMosaic({ columns = 4, maxItems = 12 }: Props) {
 
 function MosaicTile({ item }: { item: Item }) {
   return (
-    <div className="relative aspect-[3/4] overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/5">
+    <div
+      className="relative aspect-[4/5] overflow-hidden bg-white/5 ring-1 ring-white/5"
+      style={{ borderRadius: "var(--kiosk-radius)" }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={item.photoUrl}
@@ -83,18 +95,23 @@ function MosaicTile({ item }: { item: Item }) {
   );
 }
 
-function MosaicFallback({ columns }: { columns: number }) {
-  const tiles = Array.from({ length: columns * 3 });
+function MosaicFallback({ gridTemplate }: { gridTemplate: string }) {
+  const tiles = Array.from({ length: 18 });
   return (
     <div className="absolute inset-0 overflow-hidden">
       <div
-        className="grid h-full w-full gap-2 p-2 tv:gap-3 tv:p-3"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        className="grid h-full w-full"
+        style={{
+          gridTemplateColumns: gridTemplate,
+          gap: "var(--kiosk-gap)",
+          padding: "calc(var(--kiosk-gap) * 0.5)",
+        }}
       >
         {tiles.map((_, i) => (
           <div
             key={i}
-            className="aspect-[3/4] rounded-2xl bg-white/5 ring-1 ring-white/5"
+            className="aspect-[4/5] bg-white/5 ring-1 ring-white/5"
+            style={{ borderRadius: "var(--kiosk-radius)" }}
           />
         ))}
       </div>

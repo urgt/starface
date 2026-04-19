@@ -149,7 +149,10 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
   useImperativeHandle(ref, () => ({ capture, captureBurst }), [capture, captureBurst]);
 
   const errorOverlay = camError ? (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-6">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+      style={{ padding: "var(--kiosk-pad)" }}
+    >
       <CameraErrorCard code={camError} />
     </div>
   ) : null;
@@ -171,7 +174,15 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
   if (variant === "corner") {
     return (
       <>
-        <div className="pointer-events-none absolute bottom-3 right-3 z-20 w-[clamp(140px,22vw,260px)] overflow-hidden rounded-3xl border border-white/15 bg-black/40 shadow-xl tv:bottom-6 tv:right-6">
+        <div
+          className="pointer-events-none absolute z-20 overflow-hidden border border-white/15 bg-black/40 shadow-xl"
+          style={{
+            bottom: "var(--kiosk-pad)",
+            right: "var(--kiosk-pad)",
+            width: "clamp(120px, 16vw, 300px)",
+            borderRadius: "var(--kiosk-radius)",
+          }}
+        >
           <div className="relative aspect-[3/4]">
             <video
               ref={setVideoEl}
@@ -179,14 +190,23 @@ export const GestureCamera = forwardRef<GestureCameraHandle, Props>(function Ges
               playsInline
               muted
             />
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[var(--brand-primary)]/30 to-transparent" />
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/90">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[35%] bg-gradient-to-b from-[var(--brand-primary)]/30 to-transparent" />
+            <div
+              className="absolute flex items-center gap-1.5 rounded-full bg-black/60 font-semibold uppercase tracking-wider text-white/90"
+              style={{
+                left: "0.5rem",
+                top: "0.5rem",
+                paddingInline: "0.5rem",
+                paddingBlock: "0.15rem",
+                fontSize: "var(--kiosk-text-xxs)",
+              }}
+            >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
               Live
             </div>
             {state === "ready" && progress > 0 && (
               <div className="absolute inset-0 flex items-end justify-center pb-3">
-                <div className="h-1.5 w-[clamp(100px,18vw,180px)] overflow-hidden rounded-full bg-white/15">
+                <div className="h-1.5 w-[min(75%,220px)] overflow-hidden rounded-full bg-white/15">
                   <div
                     className="h-full bg-[var(--brand-primary)] transition-[width] duration-75"
                     style={{ width: `${progress * 100}%` }}
@@ -298,7 +318,13 @@ function CameraErrorCard({ code }: { code: CamErrorCode }) {
     );
 
   return (
-    <div className="max-w-xl rounded-3xl border border-white/10 bg-neutral-950/90 p-8 text-center text-white shadow-2xl">
+    <div
+      className="w-full rounded-3xl border border-white/10 bg-neutral-950/90 text-center text-white shadow-2xl"
+      style={{
+        maxWidth: "min(92vw, 36rem)",
+        padding: "clamp(1.5rem, 3vw, 2.5rem)",
+      }}
+    >
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-primary)]/20 text-2xl">
         📷
       </div>

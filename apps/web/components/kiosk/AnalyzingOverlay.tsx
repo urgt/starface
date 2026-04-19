@@ -6,13 +6,25 @@ import { t } from "@/lib/i18n";
 export function AnalyzingOverlay({ locale }: { locale: Locale }) {
   const dict = t(locale);
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-brand-gradient font-brand tv:gap-8">
-      <div className="relative h-28 w-28 tv:h-40 tv:w-40">
+    <div
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-brand-gradient font-brand"
+      style={{ gap: "calc(var(--kiosk-gap) * 1.4)", padding: "var(--kiosk-pad)" }}
+    >
+      <div
+        className="relative"
+        style={{
+          width: "clamp(7rem, 14vw, 18rem)",
+          height: "clamp(7rem, 14vw, 18rem)",
+        }}
+      >
         <div
           className="absolute inset-0 rounded-full border-2 border-[var(--brand-primary)]/50"
           style={{ animation: "glowPulse 2.4s ease-in-out infinite" }}
         />
-        <div className="absolute inset-6 rounded-full bg-[var(--brand-primary)] tv:inset-8" />
+        <div
+          className="absolute rounded-full bg-[var(--brand-primary)]"
+          style={{ inset: "18%" }}
+        />
         <div
           className="absolute inset-0 overflow-hidden rounded-full"
           style={{ mask: "radial-gradient(circle, black 40%, transparent 70%)" }}
@@ -23,14 +35,28 @@ export function AnalyzingOverlay({ locale }: { locale: Locale }) {
           />
         </div>
       </div>
-      <div className="text-center">
-        <p className="text-xl font-semibold tracking-tight text-white tv:text-3xl">
+      <div className="text-center" style={{ display: "grid", gap: "calc(var(--kiosk-gap) * 0.5)" }}>
+        <p
+          className="font-semibold tracking-tight text-white"
+          style={{ fontSize: "var(--kiosk-text-xl)" }}
+        >
           {dict.analyzing}
         </p>
-        <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-white/50 tv:text-sm">
+        <p
+          className="uppercase tracking-[0.22em] text-white/50"
+          style={{ fontSize: "var(--kiosk-badge-text)" }}
+        >
           {dict.analyzingHint}
         </p>
       </div>
+      <div
+        className="kiosk-shimmer"
+        style={{
+          width: "clamp(180px, 22vw, 360px)",
+          height: "3px",
+        }}
+        aria-hidden
+      />
     </div>
   );
 }

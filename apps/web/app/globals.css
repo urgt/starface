@@ -8,6 +8,25 @@
   --brand-gradient-from: #1a0b2e;
   --brand-gradient-to: #0a0a0a;
   --brand-font: var(--font-manrope);
+
+  /* Fluid kiosk scale — single source of truth for paddings / typography.
+     Tuned to scale gracefully from 360px phones up to 4K kiosks without
+     islands of whitespace at 2560+ or clipping at 1280. */
+  --kiosk-pad: clamp(1rem, 2.4vw, 3.5rem);
+  --kiosk-gap: clamp(0.75rem, 1.4vw, 2rem);
+  --kiosk-radius: clamp(1rem, 1.6vw, 2rem);
+  --kiosk-text-xxs: clamp(0.625rem, 0.7vw, 0.875rem);
+  --kiosk-text-xs: clamp(0.75rem, 0.85vw, 1rem);
+  --kiosk-text-sm: clamp(0.875rem, 1vw, 1.25rem);
+  --kiosk-text-md: clamp(1rem, 1.25vw, 1.5rem);
+  --kiosk-text-lg: clamp(1.125rem, 1.55vw, 2rem);
+  --kiosk-text-xl: clamp(1.25rem, 1.9vw, 2.5rem);
+  --kiosk-text-2xl: clamp(1.5rem, 2.4vw, 3.25rem);
+  --kiosk-headline: clamp(2rem, 6.2vw, 9rem);
+  --kiosk-pct: clamp(3.25rem, 12.5vw, 17rem);
+  --kiosk-qr: clamp(120px, 12vw, 260px);
+  --kiosk-emoji: clamp(3rem, 9vw, 9rem);
+  --kiosk-badge-text: clamp(0.625rem, 0.75vw, 0.9rem);
 }
 
 html,
@@ -47,4 +66,31 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Thin shimmer bar used beneath the analyzing text to fill vertical slack
+   on tall viewports without adding another focal point. */
+@keyframes kioskShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.kiosk-shimmer {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--brand-primary) 14%, transparent);
+}
+
+.kiosk-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--brand-primary) 85%, white) 50%,
+    transparent
+  );
+  animation: kioskShimmer 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }

@@ -8,13 +8,15 @@ import {
   type BrandTheme,
 } from "@/lib/brand-theme";
 import { CelebrityMosaic } from "./CelebrityMosaic";
+import { LocaleToggle } from "./LocaleToggle";
 
 type Props = {
   brand: BrandTheme;
   locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
 };
 
-export function IdleScreen({ brand, locale }: Props) {
+export function IdleScreen({ brand, locale, onLocaleChange }: Props) {
   const dict = t(locale);
   const headline =
     brandHeadline(brand, locale) ??
@@ -26,48 +28,84 @@ export function IdleScreen({ brand, locale }: Props) {
     <div className="relative flex h-full w-full flex-col bg-brand-gradient font-brand">
       {/* Celebrity mosaic — background layer */}
       <div className="absolute inset-0 opacity-40">
-        <CelebrityMosaic columns={4} maxItems={12} />
+        <CelebrityMosaic maxItems={16} />
       </div>
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_55%,transparent_0%,var(--brand-gradient-to)_85%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent tv:h-40" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/80 to-transparent tv:h-60" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[18vh] bg-gradient-to-b from-black/70 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[24vh] bg-gradient-to-t from-black/80 to-transparent" />
 
-      {/* Top bar: logo */}
-      <header className="relative z-10 flex items-center justify-between px-4 pt-4 tv:px-8 tv:pt-8 tv-hd:px-10 tv-hd:pt-10">
-        <div className="flex items-center gap-4">
+      {/* Top bar: logo + badge + locale */}
+      <header
+        className="relative z-10 flex flex-wrap items-center justify-between"
+        style={{
+          gap: "var(--kiosk-gap)",
+          paddingInline: "var(--kiosk-pad)",
+          paddingTop: "var(--kiosk-pad)",
+        }}
+      >
+        <div className="flex items-center" style={{ gap: "var(--kiosk-gap)" }}>
           {brand.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={brand.logoUrl}
               alt={brand.name}
-              className="max-h-10 max-w-[140px] object-contain tv:max-h-14 tv:max-w-[180px] tv-hd:max-h-16 tv-hd:max-w-[220px]"
+              className="object-contain"
+              style={{
+                maxHeight: "clamp(2.25rem, 3.5vw, 4rem)",
+                maxWidth: "clamp(7rem, 14vw, 16rem)",
+              }}
             />
           ) : (
-            <div className="rounded-2xl bg-white/10 px-3 py-1.5 text-sm font-semibold tracking-tight text-white/90 tv:px-5 tv:py-2 tv:text-lg">
+            <div
+              className="rounded-2xl bg-white/10 font-semibold tracking-tight text-white/90"
+              style={{
+                paddingInline: "clamp(0.75rem, 1vw, 1.25rem)",
+                paddingBlock: "clamp(0.35rem, 0.5vw, 0.6rem)",
+                fontSize: "var(--kiosk-text-sm)",
+              }}
+            >
               {brand.name}
             </div>
           )}
         </div>
-        <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/60 tv:mr-24 tv:inline-block tv:px-4 tv:py-1.5 tv:text-xs tv-hd:mr-32">
-          {dict.celebritiesShown}
+        <div className="flex items-center" style={{ gap: "var(--kiosk-gap)" }}>
+          <div
+            className="hidden items-center rounded-full border border-white/10 bg-white/5 font-semibold uppercase tracking-[0.2em] text-white/60 md:inline-flex"
+            style={{
+              paddingInline: "clamp(0.75rem, 1.1vw, 1.25rem)",
+              paddingBlock: "clamp(0.25rem, 0.45vw, 0.55rem)",
+              fontSize: "var(--kiosk-badge-text)",
+            }}
+          >
+            {dict.celebritiesShown}
+          </div>
+          <LocaleToggle locale={locale} onChange={onLocaleChange} />
         </div>
       </header>
 
       {/* Center content */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 text-center tv:px-8 tv-hd:px-10">
+      <main
+        className="relative z-10 flex flex-1 flex-col items-center justify-center text-center"
+        style={{ paddingInline: "var(--kiosk-pad)" }}
+      >
         <span
-          className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--brand-primary)]/30 bg-[var(--brand-primary)]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--brand-primary)] tv:mb-6 tv:px-5 tv:py-2 tv:text-sm"
-          style={{ animation: "floatIn 600ms cubic-bezier(0.16,1,0.3,1) both" }}
+          className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--brand-primary)]/30 bg-[var(--brand-primary)]/10 font-semibold uppercase tracking-[0.22em] text-[var(--brand-primary)]"
+          style={{
+            paddingInline: "clamp(0.75rem, 1.2vw, 1.5rem)",
+            paddingBlock: "clamp(0.3rem, 0.5vw, 0.65rem)",
+            fontSize: "var(--kiosk-badge-text)",
+            animation: "floatIn 600ms cubic-bezier(0.16,1,0.3,1) both",
+          }}
         >
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--brand-primary)]" />
           {dict.readyToSee}
         </span>
 
         <h1
-          className="max-w-5xl font-black leading-[0.95] tracking-tight text-white"
+          className="max-w-[min(92%,70rem)] font-black leading-[0.95] tracking-tight text-white"
           style={{
-            fontSize: "clamp(1.75rem, 6vw, 6rem)",
+            fontSize: "var(--kiosk-headline)",
             animation: "floatIn 700ms 80ms cubic-bezier(0.16,1,0.3,1) both",
           }}
         >
@@ -75,32 +113,54 @@ export function IdleScreen({ brand, locale }: Props) {
         </h1>
 
         <p
-          className="mt-3 max-w-3xl text-sm text-white/70 tv:mt-6 tv:text-lg tv-hd:text-2xl"
-          style={{ animation: "floatIn 700ms 160ms cubic-bezier(0.16,1,0.3,1) both" }}
+          className="max-w-[min(92%,52rem)] text-white/70"
+          style={{
+            marginTop: "var(--kiosk-gap)",
+            fontSize: "var(--kiosk-text-md)",
+            animation: "floatIn 700ms 160ms cubic-bezier(0.16,1,0.3,1) both",
+          }}
         >
           {subtitle}
         </p>
 
         <div
-          className="mt-6 flex flex-col items-center gap-2 tv:mt-12 tv:gap-4"
-          style={{ animation: "floatIn 800ms 260ms cubic-bezier(0.16,1,0.3,1) both" }}
+          className="flex flex-col items-center"
+          style={{
+            marginTop: "calc(var(--kiosk-gap) * 1.8)",
+            gap: "calc(var(--kiosk-gap) * 0.6)",
+            animation: "floatIn 800ms 260ms cubic-bezier(0.16,1,0.3,1) both",
+          }}
         >
           <div
             className="select-none leading-none"
-            style={{ fontSize: "clamp(3rem, 12vh, 8rem)" }}
+            style={{ fontSize: "var(--kiosk-emoji)" }}
           >
             ✌️
           </div>
-          <p className="text-lg font-bold text-white tv:text-2xl tv-hd:text-3xl">
-            {t(locale).idleCta}
+          <p
+            className="font-bold text-white"
+            style={{ fontSize: "var(--kiosk-text-xl)" }}
+          >
+            {dict.idleCta}
           </p>
-          <p className="text-xs text-white/50 tv:text-sm">{dict.stepBackHint}</p>
+          <p className="text-white/50" style={{ fontSize: "var(--kiosk-text-xs)" }}>
+            {dict.stepBackHint}
+          </p>
         </div>
       </main>
 
       {/* Consent */}
-      <footer className="relative z-10 px-4 pb-4 tv:px-8 tv:pb-8 tv-hd:px-10 tv-hd:pb-10">
-        <p className="mx-auto max-w-3xl text-center text-[10px] text-white/40 tv:text-xs">
+      <footer
+        className="relative z-10"
+        style={{
+          paddingInline: "var(--kiosk-pad)",
+          paddingBottom: "var(--kiosk-pad)",
+        }}
+      >
+        <p
+          className="mx-auto max-w-[min(92%,56rem)] text-center text-white/40"
+          style={{ fontSize: "var(--kiosk-text-xs)" }}
+        >
           {dict.consent}
         </p>
       </footer>
