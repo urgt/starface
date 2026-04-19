@@ -39,4 +39,10 @@ apps/web/cloudflare-env.d.ts
 scripts/models/
 scripts/seeds/
 scripts/logs/
-scripts/.seed-progress.json
+**/.seed-progress.json
+
+# python (modal_app + scripts/seed/py)
+__pycache__/
+*.py[cod]
+.venv/
+modal_app/*.log

@@ -15,6 +15,13 @@ DISPLAY_MAX_PCT = "97"
 USER_PHOTO_TTL_HOURS = "24"
 NEXT_PUBLIC_APP_URL = "https://starface.pages.dev"
 GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+MATCH_W_COS = "1.0"
+MATCH_QUALITY_PENALTY = "0.05"
+
+# Secrets (set via `wrangler secret put`):
+#   ADMIN_USER, ADMIN_PASSWORD, CRON_SHARED_SECRET,
+#   BRAND_ANALYTICS_TOKEN_SALT, GEMINI_API_KEY,
+#   MODAL_SHARED_SECRET, MODAL_EMBED_URL
 
 [[d1_databases]]
 binding = "DB"
@@ -29,8 +36,8 @@ bucket_name = "starface-storage"
 remote = true
 
 [[vectorize]]
-binding = "FACES"
-index_name = "starface-faces"
+binding = "FACES_V2"
+index_name = "starface-faces-v2"
 remote = true
 
 [triggers]

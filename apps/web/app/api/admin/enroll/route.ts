@@ -9,7 +9,7 @@ import { saveCelebrityPhoto, stripNullMeta } from "@/lib/storage";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const EMBEDDING_DIM = 512;
+const EMBEDDING_DIM = 1024;
 const MAX_CELEBRITIES_PER_BATCH = 25;
 const MAX_PHOTOS_PER_CELEBRITY = 10;
 
@@ -209,7 +209,7 @@ export async function POST(req: Request) {
         });
       }
 
-      if (vectors.length) await env.FACES.upsert(vectors);
+      if (vectors.length) await env.FACES_V2.upsert(vectors);
     } catch (e) {
       result.failed.push({
         externalId: input.externalId ?? null,

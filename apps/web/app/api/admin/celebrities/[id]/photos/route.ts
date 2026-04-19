@@ -134,7 +134,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  if (vectors.length) await env.FACES.upsert(vectors);
+  if (vectors.length) await env.FACES_V2.upsert(vectors);
 
   return NextResponse.json({ results });
 }

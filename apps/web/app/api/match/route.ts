@@ -4,13 +4,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { recordEvent } from "@/lib/analytics";
-import { appConfig, mapCosineToPct } from "@/lib/config";
+import { appConfig, EMBEDDING_DIM, mapCosineToPct } from "@/lib/config";
 import { db, schema } from "@/lib/db";
 import { saveUserPhoto } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
-
-const EMBEDDING_DIM = 512;
 
 const bodySchema = z.object({
   brandId: z.string().min(1).max(64),
@@ -32,6 +30,11 @@ type VectorMeta = {
   active: boolean;
 };
 
+type PhotoScores = {
+  blurScore: number | null;
+  frontalScore: number | null;
+};
+
 type Candidate = {
   celebrityId: string;
   celebrityPhotoId: string;
@@ -46,13 +49,26 @@ type RankContext = {
   userSex: "M" | "F" | null;
   userAge: number | null;
   applyGenderPenalty: boolean;
+  photoScoresById: Map<string, PhotoScores>;
 };
 
-function rerank(
-  matches: VectorizeMatch[],
-  ctx: RankContext,
-): Candidate[] {
-  const { matchGenderPenalty, matchAgePenalty, matchTiebreakDelta } = appConfig;
+function qualityPenalty(scores: PhotoScores | undefined, weight: number): number {
+  if (!scores) return 0;
+  const frontal = scores.frontalScore ?? 1;
+  const blur = scores.blurScore ?? 0;
+  const frontalPen = weight * (1 - Math.max(0, Math.min(1, frontal)));
+  const blurPen = weight * Math.max(0, Math.min(1, blur) - 0.5);
+  return frontalPen + blurPen;
+}
+
+function rerank(matches: VectorizeMatch[], ctx: RankContext): Candidate[] {
+  const {
+    matchWCos,
+    matchGenderPenalty,
+    matchAgePenalty,
+    matchTiebreakDelta,
+    matchQualityPenalty,
+  } = appConfig;
 
   const byCeleb = new Map<string, { match: VectorizeMatch; meta: VectorMeta }>();
   for (const m of matches) {
@@ -63,7 +79,7 @@ function rerank(
 
   const candidates: Candidate[] = Array.from(byCeleb.values()).map(({ match, meta }) => {
     const cosine = Number(match.score);
-    let score = cosine;
+    let score = matchWCos * cosine;
     if (ctx.applyGenderPenalty && ctx.userSex && meta.gender && meta.gender !== ctx.userSex) {
       score -= matchGenderPenalty;
     }
@@ -71,6 +87,7 @@ function rerank(
       const delta = Math.min(Math.abs(ctx.userAge - meta.age) / 30, 1);
       score -= matchAgePenalty * delta;
     }
+    score -= qualityPenalty(ctx.photoScoresById.get(meta.celebrityPhotoId), matchQualityPenalty);
     return {
       celebrityId: meta.celebrityId,
       celebrityPhotoId: meta.celebrityPhotoId,
@@ -132,7 +149,7 @@ async function handleMatch(req: Request) {
   const { env } = getCloudflareContext();
   const k = Math.max(10, Math.min(50, appConfig.matchRerankK));
 
-  const queryResult = await env.FACES.query(payload.embedding, {
+  const queryResult = await env.FACES_V2.query(payload.embedding, {
     topK: k,
     returnMetadata: "all",
   });
@@ -146,10 +163,39 @@ async function handleMatch(req: Request) {
     return NextResponse.json({ error: "no_celebrities" }, { status: 503 });
   }
 
-  // buffalo_l gender head misfires on <16yo + blurry faces; avoid false penalty there.
+  // Load quality scores for the candidate photos so the rerank can penalize
+  // blurry / off-angle celebrity stills that were enrolled but shouldn't win.
+  const photoIds = Array.from(
+    new Set(
+      queryResult.matches
+        .map((m) => (m.metadata as unknown as VectorMeta | undefined)?.celebrityPhotoId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  );
+  const photoScoresById = new Map<string, PhotoScores>();
+  if (photoIds.length) {
+    const rows = await db
+      .select({
+        id: schema.celebrityPhotos.id,
+        blurScore: schema.celebrityPhotos.blurScore,
+        frontalScore: schema.celebrityPhotos.frontalScore,
+      })
+      .from(schema.celebrityPhotos)
+      .where(inArray(schema.celebrityPhotos.id, photoIds));
+    for (const r of rows) {
+      photoScoresById.set(r.id, { blurScore: r.blurScore, frontalScore: r.frontalScore });
+    }
+  }
+
+  // buffalo_l/gender heads misfire on <16yo + blurry faces; keep the gate.
   const applyGenderPenalty = userSex !== null && faceQuality === "high" && (userAge ?? 99) >= 16;
 
-  const ranked = rerank(queryResult.matches, { userSex, userAge, applyGenderPenalty });
+  const ranked = rerank(queryResult.matches, {
+    userSex,
+    userAge,
+    applyGenderPenalty,
+    photoScoresById,
+  });
   if (!ranked.length) {
     await recordEvent({
       brandId: brand.id,
@@ -239,6 +285,7 @@ async function handleMatch(req: Request) {
       celebrityId: top.celebrityId,
       celebrityPhotoId: top.celebrityPhotoId,
       similarity: similarityPct,
+      cosine: top.cosine,
       userSex,
       userAge,
       faceQuality,

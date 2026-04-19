@@ -186,3 +186,81 @@ export function loadManifest(outDir: string): WikidataEntry[] {
   if (!existsSync(path)) return [];
   return JSON.parse(readFileSync(path, "utf-8")) as WikidataEntry[];
 }
+
+const BY_IDS_QUERY = `
+SELECT DISTINCT ?person ?personLabel ?personLabelRu ?descEn ?descRu ?image ?sitelinks WHERE {
+  VALUES ?person { {values} }
+  ?person wdt:P18 ?image ;
+          wikibase:sitelinks ?sitelinks .
+  OPTIONAL { ?person rdfs:label ?personLabelRu . FILTER(LANG(?personLabelRu) = "ru") }
+  OPTIONAL { ?person schema:description ?descEn . FILTER(LANG(?descEn) = "en") }
+  OPTIONAL { ?person schema:description ?descRu . FILTER(LANG(?descRu) = "ru") }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . ?person rdfs:label ?personLabel . }
+}
+`;
+
+export async function fetchByIds(
+  ids: string[],
+  category: Category,
+  outDir: string,
+): Promise<WikidataEntry[]> {
+  const photosDir = resolve(outDir, "photos");
+  mkdirSync(photosDir, { recursive: true });
+
+  const clean = Array.from(
+    new Set(ids.map((id) => id.trim()).filter((id) => /^Q\d+$/.test(id))),
+  );
+  if (!clean.length) return [];
+
+  const values = clean.map((id) => `wd:${id}`).join(" ");
+  const query = BY_IDS_QUERY.replace("{values}", values);
+  console.log(`[wikidata] fetching preset category=${category} ids=${clean.length} ...`);
+  const bindings = await sparql(query);
+
+  const entries: WikidataEntry[] = [];
+  let idx = 0;
+  for (const b of bindings) {
+    idx++;
+    const name = b.personLabel?.value?.trim() ?? "";
+    const nameRu = b.personLabelRu?.value?.trim() ?? "";
+    const descriptionEn = b.descEn?.value?.trim() ?? "";
+    const descriptionRu = b.descRu?.value?.trim() ?? "";
+    const imageUrl = b.image?.value ?? "";
+    const personUrl = b.person?.value ?? "";
+    const wikidataId = personUrl.split("/").pop() ?? "";
+    const sitelinks = Number(b.sitelinks?.value ?? "0");
+    if (!name || name.startsWith("Q") || !imageUrl) continue;
+
+    const hash = createHash("sha1").update(imageUrl).digest("hex").slice(0, 16);
+    const ext = extFromUrl(imageUrl);
+    const filename = `${category}-${hash}.${ext}`;
+    const photoPath = join(photosDir, filename);
+
+    if (!existsSync(photoPath)) {
+      try {
+        await download(imageUrl, photoPath);
+        console.log(`  [${idx}/${bindings.length}] preset ${name}`);
+        await sleep(150);
+      } catch (e) {
+        console.warn(
+          `  [${idx}/${bindings.length}] download failed ${name}: ${(e as Error).message}`,
+        );
+        continue;
+      }
+    }
+
+    entries.push({
+      name,
+      nameRu,
+      descriptionEn,
+      descriptionRu,
+      category,
+      wikidataId,
+      imageUrl,
+      photoPath,
+      sitelinks,
+    });
+  }
+  console.log(`[wikidata] preset done: ${entries.length} usable entries`);
+  return entries;
+}

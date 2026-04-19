@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (primary) {
     try {
       const { env } = getCloudflareContext();
-      const vectors = await env.FACES.getByIds([primary.id]);
+      const vectors = await env.FACES_V2.getByIds([primary.id]);
       const values = vectors[0]?.values;
       if (values) {
         primaryEmbedding = Array.from(values as ArrayLike<number>);

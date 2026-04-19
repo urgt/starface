@@ -40,7 +40,7 @@ export async function DELETE(
   const { env } = getCloudflareContext();
 
   await db.delete(schema.celebrityPhotos).where(eq(schema.celebrityPhotos.id, photoId));
-  await env.FACES.deleteByIds([photoId]);
+  await env.FACES_V2.deleteByIds([photoId]);
   await deleteStoredFile(target.photoPath);
 
   if (target.isPrimary) {

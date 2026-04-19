@@ -1,0 +1,9 @@
+modal>=0.64
+torch>=2.2,<3
+torchvision>=0.17,<1
+transformers>=4.40,<5
+onnxruntime>=1.17,<2
+pillow>=10.0
+numpy>=1.26,<2
+fastapi>=0.110
+python-multipart>=0.0.9

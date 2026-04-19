@@ -95,6 +95,8 @@ export function KioskApp({ brand, appUrl }: Props) {
           userPhotoBase64: frames[0],
           detScore: embed.detScore,
           faceQuality: embed.faceQuality,
+          clientSex: embed.sex,
+          clientAge: embed.age,
         }),
         signal: AbortSignal.timeout(25_000),
       });
@@ -195,6 +197,8 @@ function humanizeError(code: string): string {
     case "model_load_failed":
     case "detector_load_failed":
       return "Модель не загрузилась. Проверьте соединение";
+    case "server_unavailable":
+      return "Сервис анализа недоступен. Попробуйте ещё раз";
     case "brand_not_found":
       return "Этот бренд не найден";
     case "no_celebrities":

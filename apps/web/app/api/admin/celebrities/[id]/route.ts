@@ -113,7 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .limit(1);
 
     if (photos.length && celeb) {
-      const existing = await env.FACES.getByIds(photos.map((p) => p.id));
+      const existing = await env.FACES_V2.getByIds(photos.map((p) => p.id));
       const byId = new Map(existing.map((v) => [v.id, v]));
       const updated: VectorizeVector[] = [];
       for (const p of photos) {
@@ -133,7 +133,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           }),
         });
       }
-      if (updated.length) await env.FACES.upsert(updated);
+      if (updated.length) await env.FACES_V2.upsert(updated);
     }
   }
 
@@ -159,7 +159,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   if (photos.length) {
     const { env } = getCloudflareContext();
-    await env.FACES.deleteByIds(photos.map((p) => p.id));
+    await env.FACES_V2.deleteByIds(photos.map((p) => p.id));
     for (const p of photos) await deleteStoredFile(p.photoPath);
   }
   return NextResponse.json({ ok: true, deletedPhotos: photos.length });
