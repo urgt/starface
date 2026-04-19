@@ -1,24 +1,29 @@
 "use client";
 
+export type BulkAction = "descriptions" | "photos";
+
 export function BulkActionBar({
   selectedCount,
   totalOnPage,
-  running,
+  runningAction,
   progress,
   onSelectAll,
   onClear,
-  onRegenerate,
+  onRegenerateDescriptions,
+  onFindPhotos,
   onCancel,
 }: {
   selectedCount: number;
   totalOnPage: number;
-  running: boolean;
+  runningAction: BulkAction | null;
   progress: { done: number; total: number };
   onSelectAll: () => void;
   onClear: () => void;
-  onRegenerate: () => void;
+  onRegenerateDescriptions: () => void;
+  onFindPhotos: () => void;
   onCancel: () => void;
 }) {
+  const running = runningAction !== null;
   if (!running && selectedCount === 0) return null;
 
   return (
@@ -26,7 +31,8 @@ export function BulkActionBar({
       {running ? (
         <>
           <span className="font-medium text-neutral-900">
-            Regenerating {progress.done}/{progress.total}…
+            {runningAction === "descriptions" ? "Regenerating" : "Finding photos"}{" "}
+            {progress.done}/{progress.total}…
           </span>
           <div className="ml-auto" />
           <button
@@ -58,7 +64,14 @@ export function BulkActionBar({
           <div className="ml-auto" />
           <button
             type="button"
-            onClick={onRegenerate}
+            onClick={onFindPhotos}
+            className="rounded-lg border border-neutral-300 bg-white px-4 py-1.5 font-semibold hover:bg-neutral-50"
+          >
+            Find photos
+          </button>
+          <button
+            type="button"
+            onClick={onRegenerateDescriptions}
             className="rounded-lg bg-neutral-900 px-4 py-1.5 font-semibold text-white hover:bg-neutral-800"
           >
             Regenerate descriptions

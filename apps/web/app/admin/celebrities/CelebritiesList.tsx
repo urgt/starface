@@ -3,17 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { BulkActionBar } from "./BulkActionBar";
+import { BulkActionBar, type BulkAction } from "./BulkActionBar";
 import { CelebrityCard, type BulkStatus } from "./CelebrityCard";
 import { CelebrityModal } from "./CelebrityModal";
+import { BULK_PHOTO_CONCURRENCY, findPhotosForCeleb } from "./bulk-photos";
 import type { CelebrityRow } from "./types";
 
 export type { CelebrityPhotoMini, CelebrityRow } from "./types";
 
-const CONCURRENCY = 3;
+const DESC_CONCURRENCY = 3;
 const DONE_BADGE_MS = 2500;
 
 type Toast = { text: string; tone: "success" | "error" };
+
+type ItemOutcome =
+  | { kind: "done"; label?: string }
+  | { kind: "skipped"; reason: string }
+  | { kind: "error"; message: string };
 
 export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }) {
   const router = useRouter();
@@ -21,7 +27,8 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkStatus, setBulkStatus] = useState<Map<string, BulkStatus>>(() => new Map());
   const [bulkErrors, setBulkErrors] = useState<Map<string, string>>(() => new Map());
-  const [running, setRunning] = useState(false);
+  const [bulkLabels, setBulkLabels] = useState<Map<string, string>>(() => new Map());
+  const [runningAction, setRunningAction] = useState<BulkAction | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -34,11 +41,11 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
     return m;
   }, [celebrities]);
 
-  // Reset selection + transient state when the celebrities list (page) changes.
   useEffect(() => {
     setSelectedIds(new Set());
     setBulkStatus(new Map());
     setBulkErrors(new Map());
+    setBulkLabels(new Map());
     for (const t of doneTimersRef.current.values()) clearTimeout(t);
     doneTimersRef.current.clear();
   }, [celebrities]);
@@ -75,22 +82,49 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
     setSelectedIds(new Set());
   }, []);
 
-  const setStatus = useCallback((id: string, status: BulkStatus | null, error?: string) => {
+  function applyOutcome(id: string, outcome: ItemOutcome) {
     setBulkStatus((prev) => {
       const next = new Map(prev);
-      if (status === null) next.delete(id);
-      else next.set(id, status);
+      next.set(id, outcome.kind);
       return next;
     });
     setBulkErrors((prev) => {
       const next = new Map(prev);
-      if (error) next.set(id, error);
+      if (outcome.kind === "skipped") next.set(id, outcome.reason);
+      else if (outcome.kind === "error") next.set(id, outcome.message);
       else next.delete(id);
       return next;
     });
-  }, []);
+    setBulkLabels((prev) => {
+      const next = new Map(prev);
+      if (outcome.kind === "done" && outcome.label) next.set(id, outcome.label);
+      else next.delete(id);
+      return next;
+    });
 
-  async function runBulk() {
+    if (outcome.kind === "done") {
+      const timer = setTimeout(() => {
+        setBulkStatus((prev) => {
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+        setBulkLabels((prev) => {
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+        doneTimersRef.current.delete(id);
+      }, DONE_BADGE_MS);
+      doneTimersRef.current.set(id, timer);
+    }
+  }
+
+  async function runPool(
+    action: BulkAction,
+    concurrency: number,
+    perItem: (id: string, signal: AbortSignal) => Promise<ItemOutcome>,
+  ) {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
 
@@ -101,11 +135,11 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
     for (const id of ids) initial.set(id, "pending");
     setBulkStatus(initial);
     setBulkErrors(new Map());
+    setBulkLabels(new Map());
     setProgress({ done: 0, total: ids.length });
-    setRunning(true);
+    setRunningAction(action);
 
-    let ok = 0;
-    let failed = 0;
+    const counts = { done: 0, skipped: 0, failed: 0 };
     let cursor = 0;
 
     async function worker() {
@@ -114,63 +148,83 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
         const i = cursor++;
         if (i >= ids.length) return;
         const id = ids[i];
+        let outcome: ItemOutcome;
         try {
-          const res = await fetch(`/api/admin/celebrities/${id}/generate-description`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: "{}",
-            signal: controller.signal,
-          });
-          if (!res.ok) {
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string;
-              detail?: string;
-            };
-            const msg = data.detail ?? data.error ?? `HTTP ${res.status}`;
-            setStatus(id, "error", msg);
-            failed++;
-          } else {
-            setStatus(id, "done");
-            ok++;
-            const timer = setTimeout(() => {
-              setStatus(id, null);
-              doneTimersRef.current.delete(id);
-            }, DONE_BADGE_MS);
-            doneTimersRef.current.set(id, timer);
-          }
+          outcome = await perItem(id, controller.signal);
         } catch (e) {
           if (controller.signal.aborted) return;
-          setStatus(id, "error", (e as Error).message);
-          failed++;
-        } finally {
-          if (!controller.signal.aborted) {
-            setProgress((p) => ({ ...p, done: p.done + 1 }));
-          }
+          outcome = { kind: "error", message: (e as Error).message };
         }
+        if (controller.signal.aborted) return;
+        applyOutcome(id, outcome);
+        if (outcome.kind === "done") counts.done++;
+        else if (outcome.kind === "skipped") counts.skipped++;
+        else counts.failed++;
+        setProgress((p) => ({ ...p, done: p.done + 1 }));
       }
     }
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, ids.length) }, () => worker());
+    const workers = Array.from({ length: Math.min(concurrency, ids.length) }, () =>
+      worker(),
+    );
     await Promise.all(workers);
 
     if (controller.signal.aborted) {
-      // Drop pending overlays for items that never started.
       setBulkStatus((prev) => {
         const next = new Map(prev);
         for (const [id, s] of prev) if (s === "pending") next.delete(id);
         return next;
       });
-      setToast({ text: `Cancelled. ${ok} ok, ${failed} failed.`, tone: "error" });
-    } else {
       setToast({
-        text: `Done: ${ok} ok, ${failed} failed.`,
-        tone: failed > 0 ? "error" : "success",
+        text: `Cancelled. ${counts.done} ok, ${counts.skipped} skipped, ${counts.failed} failed.`,
+        tone: "error",
+      });
+    } else {
+      const text =
+        action === "descriptions"
+          ? `Done: ${counts.done} ok, ${counts.failed} failed.`
+          : `Added photos for ${counts.done} celebs. ${counts.skipped} skipped, ${counts.failed} failed.`;
+      setToast({
+        text,
+        tone: counts.failed > 0 ? "error" : "success",
       });
     }
 
-    setRunning(false);
+    setRunningAction(null);
     abortRef.current = null;
     router.refresh();
+  }
+
+  async function runRegenerateDescriptions() {
+    await runPool("descriptions", DESC_CONCURRENCY, async (id, signal) => {
+      const res = await fetch(`/api/admin/celebrities/${id}/generate-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal,
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          detail?: string;
+        };
+        return {
+          kind: "error",
+          message: data.detail ?? data.error ?? `HTTP ${res.status}`,
+        };
+      }
+      return { kind: "done" };
+    });
+  }
+
+  async function runFindPhotos() {
+    await runPool("photos", BULK_PHOTO_CONCURRENCY, async (id, signal) => {
+      const outcome = await findPhotosForCeleb(id, signal);
+      if (outcome.kind === "added") {
+        return { kind: "done", label: `+${outcome.count}` };
+      }
+      return outcome;
+    });
   }
 
   function cancelBulk() {
@@ -184,11 +238,12 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
       <BulkActionBar
         selectedCount={selectedIds.size}
         totalOnPage={celebrities.length}
-        running={running}
+        runningAction={runningAction}
         progress={progress}
         onSelectAll={selectAll}
         onClear={clearSelection}
-        onRegenerate={runBulk}
+        onRegenerateDescriptions={runRegenerateDescriptions}
+        onFindPhotos={runFindPhotos}
         onCancel={cancelBulk}
       />
 
@@ -201,6 +256,7 @@ export function CelebritiesList({ celebrities }: { celebrities: CelebrityRow[] }
             onToggleSelect={() => toggleSelect(c.id)}
             bulkStatus={bulkStatus.get(c.id) ?? null}
             bulkError={bulkErrors.get(c.id) ?? null}
+            bulkDoneLabel={bulkLabels.get(c.id) ?? null}
             onOpen={() => setOpenId(c.id)}
           />
         ))}

@@ -4,7 +4,7 @@ import type { MouseEvent } from "react";
 
 import type { CelebrityRow } from "./types";
 
-export type BulkStatus = "pending" | "done" | "error";
+export type BulkStatus = "pending" | "done" | "error" | "skipped";
 
 export function CelebrityCard({
   celeb,
@@ -13,6 +13,7 @@ export function CelebrityCard({
   onToggleSelect,
   bulkStatus,
   bulkError,
+  bulkDoneLabel,
 }: {
   celeb: CelebrityRow;
   onOpen: () => void;
@@ -20,6 +21,7 @@ export function CelebrityCard({
   onToggleSelect: () => void;
   bulkStatus: BulkStatus | null;
   bulkError: string | null;
+  bulkDoneLabel: string | null;
 }) {
   const preview = celeb.descriptionUz || celeb.descriptionRu || celeb.descriptionEn || "";
   const primary = celeb.primaryPhotoPath ?? celeb.photos[0]?.photoPath ?? null;
@@ -53,8 +55,16 @@ export function CelebrityCard({
       </button>
 
       {bulkStatus === "done" && (
-        <div className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-md bg-green-600 text-xs font-bold text-white shadow-sm">
-          ✓
+        <div className="absolute right-2 top-2 z-20 flex h-6 items-center justify-center rounded-md bg-green-600 px-1.5 text-xs font-bold text-white shadow-sm">
+          {bulkDoneLabel ?? "✓"}
+        </div>
+      )}
+      {bulkStatus === "skipped" && (
+        <div
+          title={bulkError ?? "skipped"}
+          className="absolute right-2 top-2 z-20 flex h-6 items-center justify-center rounded-md bg-neutral-500 px-1.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm"
+        >
+          skip
         </div>
       )}
       {bulkStatus === "error" && (

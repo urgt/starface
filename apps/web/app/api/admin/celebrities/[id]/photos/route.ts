@@ -20,6 +20,8 @@ const photoSchema = z.object({
   blurScore: z.number().nullable().optional(),
   frontalScore: z.number().nullable().optional(),
   overallScore: z.number().nullable().optional(),
+  source: z.string().max(32).optional(),
+  sourceUrl: z.string().url().max(2048).optional(),
 });
 
 const bodySchema = z.object({
@@ -100,6 +102,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           blurScore: p.blurScore ?? null,
           frontalScore: p.frontalScore ?? null,
           overallScore: p.overallScore ?? null,
+          source: p.source ?? null,
+          sourceUrl: p.sourceUrl ?? null,
         })
         .returning({ id: schema.celebrityPhotos.id });
 
@@ -113,6 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           gender: celeb.gender,
           age: celeb.age,
           popularity: celeb.popularity,
+          source: p.source,
           active: true,
         }),
       });
