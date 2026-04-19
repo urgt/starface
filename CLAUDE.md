@@ -8,7 +8,7 @@ StarFace UZ is a B2B SaaS white-label kiosk platform: a visitor flashes ✌️ a
 
 - `apps/web` — Next.js 15 App Router deployed to Cloudflare Pages via `@opennextjs/cloudflare`. Hosts the kiosk, mobile result page `/r/[resultId]`, admin, brand analytics `/b/[brandId]/analytics`, and all `/api/*` routes. Drizzle ORM → D1 (SQLite). Package name `@starface/web`.
 - `modal_app/` — Python pipeline (YuNet + DINOv2 ViT-L/14) deployed to Modal.com. Exposes `POST /embed` and `POST /embed/burst` behind a bearer-token secret. Called from the Cloudflare worker via `/api/embed` proxy.
-- `scripts/` — local-only seed/enroll tooling. `scripts/seed/py/` (Python, GPU, reuses `modal_app/pipeline.py`) is the current enrollment path. `scripts/seed/wikidata-cli.ts` and `scripts/seed/descriptions.ts` (Node/tsx) still handle Wikidata fetch and LLM descriptions. Legacy `scripts/seed/enroll.ts` (MobileFaceNet) is retained only for reference.
+- `scripts/` — local-only seed/enroll tooling. `scripts/seed/py/` (Python, GPU, reuses `modal_app/pipeline.py`) is the only enrollment path. `scripts/seed/wikidata-cli.ts` and `scripts/seed/descriptions.ts` (Node/tsx) still handle Wikidata fetch and LLM descriptions. The old `scripts/seed/enroll.ts` + `face-embed.ts` (Node + MobileFaceNet) was deleted on 2026-04-19 — grep git history if you ever need the legacy implementation.
 
 Cloudflare bindings (see `apps/web/wrangler.toml`):
 - **D1** — `DB` → `starface` (metadata: brands, celebrities, celebrity_photos, match_results, events, app_settings).
@@ -58,7 +58,7 @@ uv run python enroll.py --category uz
 pnpm --filter @starface/scripts descriptions --limit 20
 ```
 
-`scripts/models/yunet.onnx` is reused by both `scripts/seed/py/` (via `YUNET_MODEL_PATH`) and the Modal image (which downloads its own copy at build time). The `.seed-progress.json` file in cwd makes runs resumable. The legacy `scripts/seed/enroll.ts` + `scripts/seed/face-embed.ts` (Node, MobileFaceNet) is retained only as reference — do not re-introduce it into new pipelines.
+`scripts/models/yunet.onnx` is reused by both `scripts/seed/py/` (via `YUNET_MODEL_PATH`) and the Modal image (which downloads its own copy at build time). The resumable marker lives at `scripts/seed/py/.seed-progress.json`; pass `--reset-progress` to drop previously-skipped entries after a dry run.
 
 ### Modal (embedding service)
 
@@ -88,9 +88,9 @@ pnpm --filter @starface/web db:migrate:remote
 ### Match flow
 
 1. Kiosk captures a burst (MediaPipe Blaze Face is only a UX gate — "no face" before the shutter). It POSTs the raw JPEG frames to `/api/embed/burst` on the Cloudflare worker.
-2. `/api/embed(/burst)` (`apps/web/app/api/embed/**`) forwards the multipart body to Modal with `Authorization: Bearer $MODAL_SHARED_SECRET`. Modal runs YuNet → 5-point similarity transform → 224×224 crop → **DINOv2 ViT-L/14** → 1024-D L2-normalized vector, plus optional FairFace gender/age. Pipeline lives in `modal_app/pipeline.py`.
-3. Kiosk POSTs `{brandId, embedding (1024 floats), userPhotoBase64, detScore, faceQuality, clientSex, clientAge}` to `/api/match`.
-4. Route validates the brand, then queries `env.FACES_V2.query(embedding, topK)` (Vectorize) with metadata return, and loads `blurScore`/`frontalScore` for the candidate photos from D1.
+2. `/api/embed(/burst)` (`apps/web/app/api/embed/**`) forwards the multipart body to Modal with `Authorization: Bearer $MODAL_SHARED_SECRET`. Modal runs YuNet → 5-point Umeyama similarity transform → 224×224 crop with 1.6× margin → **DINOv2 ViT-L/14** → 1024-D L2-normalized vector, plus FairFace ViT classifiers (`dima806/fairface_{gender,age}_image_detection`, Apache 2.0) for `sex`/`age` and blur/frontal quality scores. `/embed/burst` additionally rejects captures where pairwise cosine between frames < 0.85 (code `burst_inconsistent`). Pipeline lives in `modal_app/pipeline.py`.
+3. Kiosk POSTs `{brandId, embedding (1024 floats), userPhotoBase64, detScore, faceQuality, clientSex, clientAge}` to `/api/match`. `clientSex`/`clientAge` come from Modal's FairFace output.
+4. Route validates the brand, then queries `env.FACES_V2.query(embedding, topK)` (Vectorize) with metadata return, and loads `blurScore`/`frontalScore` for the candidate photos from D1 (populated during enrollment so the quality penalty can down-rank blurry or off-angle celebrity stills).
 5. Re-rank (`lib/config.ts` knobs): `score = MATCH_W_COS·cos − gender_penalty − age_penalty − quality_penalty(blur, frontal)`. Gender penalty only applies when `faceQuality === "high"` and user age ≥ 16. Tiebreak delta swaps top-1 if an opposite-sex top is within `MATCH_TIEBREAK_DELTA`. `MATCH_RERANK_K` bounds how many top vectors get re-ranked (hard-capped at 50 by Vectorize).
 6. `mapCosineToPct` (`apps/web/lib/config.ts`) rescales cosine → display percent using `MATCH_MIN_COSINE`, `DISPLAY_MIN_PCT`, `DISPLAY_MAX_PCT`. The UX guarantees a "pleasant" floor (never shows below 60%) — tune via env vars / wrangler `[vars]`, not by changing the formula.
 7. User photo saved to R2 `users/{uuid}.jpg`; match row inserted into D1 `match_results` with `expiresAt = now + USER_PHOTO_TTL_HOURS`; event row appended to `events`.
@@ -137,7 +137,7 @@ Three config surfaces:
 ## Hard rules
 
 - All ML runs on Modal.com (`modal_app/`). The Cloudflare worker never loads a model; it proxies selfies to `POST /embed` and queries Vectorize. Face detection/embedding does NOT run in the browser anymore — MediaPipe Blaze Face stays only as a lightweight UX gate. If a task asks to bring ML back into the worker or browser, flag it as an architectural change.
-- Commercial licensing: only Apache-2.0 / MIT / BSD / CC-BY-commercial-OK models may ship. Current stack: YuNet (BSD), DINOv2 ViT-L/14 (Apache 2.0), MediaPipe Blaze Face (Apache 2.0). FairFace (CC-BY 4.0) slot is wired via `pipeline.predict_attrs` but currently a stub. InsightFace `buffalo_l`, FaceCLIP, CelebA/VGGFace2/WebFace* are non-commercial and must not be introduced without a negotiated license.
+- Commercial licensing: only Apache-2.0 / MIT / BSD / CC-BY-commercial-OK models may ship. Current stack: YuNet (BSD), DINOv2 ViT-L/14 (Apache 2.0), MediaPipe Blaze Face (Apache 2.0), `dima806/fairface_{gender,age}_image_detection` (Apache 2.0). The original FairFace Google-Drive weights are unreachable in 2026; the dima806 HF ViT classifiers are the live drop-in and pull into Modal's `/hf-cache` volume automatically. InsightFace `buffalo_l`, FaceCLIP, CelebA/VGGFace2/WebFace* are non-commercial and must not be introduced without a negotiated license.
 - Dataset sourcing: celebrity photos come from Wikidata + Wikimedia Commons only (CC-BY / CC-BY-SA). Academic face datasets are research-only; don't import them.
 - No Postgres / pgvector. D1 + Vectorize are the database. Schema changes go through `drizzle/schema.ts` → `drizzle-kit generate` → `wrangler d1 migrations apply`.
 - No filesystem writes in the worker. Everything persistent is R2 (files), D1 (rows), or Vectorize (embeddings). `lib/storage.ts` is the only path to R2.

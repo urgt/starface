@@ -11,7 +11,9 @@ export type SeedProgress = {
   failed: Array<{ externalId: string; reason: string }>;
 };
 
-export function readSeedProgress(progressFile = ".seed-progress.json"): SeedProgress {
+export function readSeedProgress(
+  progressFile = "seed/py/.seed-progress.json",
+): SeedProgress {
   const path = resolve(SCRIPTS_DIR, progressFile);
   if (!existsSync(path)) {
     return { exists: false, path, done: [], failed: [] };

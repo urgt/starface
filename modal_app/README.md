@@ -5,10 +5,22 @@ GPU inference for the kiosk. One container, one endpoint, L4 GPU, warm 24/7.
 ## Pipeline
 
 Selfie → YuNet detect + 5 keypoints → Umeyama similarity transform → 224×224
-crop → DINOv2 ViT-L/14 → 1024-D L2-normalized vector.
+crop with 1.6× margin (DINOv2 needs the hair + chin context for wow-match) →
+DINOv2 ViT-L/14 → 1024-D L2-normalized vector. In parallel, FairFace ViT
+classifiers predict `sex ∈ {M,F}` and `age ∈ {0-2,3-9,…,70+}` (the age bucket is
+mapped to its midpoint). Blur and frontal scores are computed on the aligned
+crop and returned alongside the embedding so `/api/admin/enroll` can stuff them
+into D1 for the quality-weighted rerank.
 
-Licenses (all commercial-safe): YuNet (BSD), DINOv2 (Apache 2.0), FairFace
-weights slot (CC-BY 4.0) is a TODO in `pipeline.predict_attrs`.
+`/embed/burst` additionally averages up to N frames and rejects the capture if
+the pairwise cosine between any two embeddings drops below `BURST_CONSISTENCY_THRESHOLD`
+(0.85 by default) — prevents smeared identity when the user moved mid-shutter.
+
+Licenses (all commercial-safe):
+- YuNet — BSD (OpenCV zoo)
+- DINOv2 ViT-L/14 — Apache 2.0 (Meta)
+- `dima806/fairface_gender_image_detection`, `dima806/fairface_age_image_detection`
+  — Apache 2.0 (HF, pulled automatically into `/hf-cache` volume on first request).
 
 ## Files
 
