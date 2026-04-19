@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Cloudflare env types
+        run: pnpm --filter @starface/web cf-typegen
+
       - name: Build
         run: pnpm --filter @starface/web exec opennextjs-cloudflare build
 
