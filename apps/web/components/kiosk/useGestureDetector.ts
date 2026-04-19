@@ -64,12 +64,16 @@ export function useGestureDetector({
   // Lazy init: don't download the MediaPipe WASM + gesture model until the
   // camera stream is actually up. On slow TVs this removes a ~2MB blocking
   // download from the initial /kiosk page-load waterfall.
+  // Dep is `[enabled]` only — this effect itself calls setState, so adding
+  // `state` to deps would cause it to cancel and close its own recognizer
+  // mid-init.
   useEffect(() => {
-    if (!enabled || state !== "idle") return;
+    if (!enabled) return;
     let cancelled = false;
     let idleId = 0;
 
     async function init() {
+      if (cancelled || recognizerRef.current) return;
       try {
         suppressMediaPipeInfoLogs();
         setState("loading");
@@ -98,7 +102,7 @@ export function useGestureDetector({
         setState("ready");
       } catch (err) {
         console.warn("gesture init failed", err);
-        setState("error");
+        if (!cancelled) setState("error");
       }
     }
 
@@ -110,7 +114,7 @@ export function useGestureDetector({
       recognizerRef.current?.close();
       recognizerRef.current = null;
     };
-  }, [enabled, state]);
+  }, [enabled]);
 
   // Gesture polling: setInterval at TICK_MS so we don't burn 60fps of empty
   // RAF callbacks on idle TV CPUs. Paused when the page is hidden.

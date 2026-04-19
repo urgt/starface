@@ -49,7 +49,7 @@ export function IdleScreen({ brand, locale }: Props) {
             </div>
           )}
         </div>
-        <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/60 tv:inline-block tv:px-4 tv:py-1.5 tv:text-xs">
+        <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/60 tv:mr-24 tv:inline-block tv:px-4 tv:py-1.5 tv:text-xs tv-hd:mr-32">
           {dict.celebritiesShown}
         </div>
       </header>
