@@ -130,7 +130,7 @@ async function handleMatch(req: Request) {
   const faceQuality = payload.faceQuality;
 
   const { env } = getCloudflareContext();
-  const k = Math.max(10, Math.min(200, appConfig.matchRerankK));
+  const k = Math.max(10, Math.min(50, appConfig.matchRerankK));
 
   const queryResult = await env.FACES.query(payload.embedding, {
     topK: k,
