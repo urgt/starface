@@ -1,19 +1,77 @@
 "use client";
 
+import type { MouseEvent } from "react";
+
 import type { CelebrityRow } from "./types";
+
+export type BulkStatus = "pending" | "done" | "error";
 
 export function CelebrityCard({
   celeb,
   onOpen,
+  selected,
+  onToggleSelect,
+  bulkStatus,
+  bulkError,
 }: {
   celeb: CelebrityRow;
   onOpen: () => void;
+  selected: boolean;
+  onToggleSelect: () => void;
+  bulkStatus: BulkStatus | null;
+  bulkError: string | null;
 }) {
   const preview = celeb.descriptionUz || celeb.descriptionRu || celeb.descriptionEn || "";
   const primary = celeb.primaryPhotoPath ?? celeb.photos[0]?.photoPath ?? null;
+  const locked = bulkStatus === "pending";
+
+  function handleCheckboxClick(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    onToggleSelect();
+  }
+
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-shadow hover:shadow-md">
-      <button onClick={onOpen} className="block w-full text-left">
+    <div
+      className={
+        "group relative overflow-hidden rounded-xl border bg-white text-left transition-shadow hover:shadow-md " +
+        (selected ? "border-neutral-900 ring-2 ring-neutral-900" : "border-neutral-200")
+      }
+    >
+      <button
+        type="button"
+        aria-pressed={selected}
+        aria-label={selected ? "Deselect" : "Select"}
+        onClick={handleCheckboxClick}
+        className={
+          "absolute left-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow-sm transition-colors " +
+          (selected
+            ? "border-neutral-900 bg-neutral-900 text-white"
+            : "border-neutral-300 bg-white/90 text-transparent hover:border-neutral-500 hover:text-neutral-400")
+        }
+      >
+        ✓
+      </button>
+
+      {bulkStatus === "done" && (
+        <div className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-md bg-green-600 text-xs font-bold text-white shadow-sm">
+          ✓
+        </div>
+      )}
+      {bulkStatus === "error" && (
+        <div
+          title={bulkError ?? "error"}
+          className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-md bg-red-600 text-xs font-bold text-white shadow-sm"
+        >
+          !
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={locked}
+        className="block w-full text-left disabled:cursor-progress"
+      >
         {primary ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
@@ -51,6 +109,12 @@ export function CelebrityCard({
           </div>
         </div>
       </button>
+
+      {locked && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/60">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
+        </div>
+      )}
     </div>
   );
 }
