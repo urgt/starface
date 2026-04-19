@@ -7,6 +7,11 @@ import {
 } from "@mediapipe/tasks-vision";
 import * as ort from "onnxruntime-web";
 
+if (typeof window !== "undefined") {
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.proxy = false;
+}
+
 export type FaceEmbedCode =
   | "no_face"
   | "multiple_faces"
@@ -136,7 +141,7 @@ function alignFace(
     angle = Math.atan2(dy, dx);
   }
 
-  const { canvas, ctx } = getAlignedCanvas();
+  const { ctx } = getAlignedCanvas();
   ctx.save();
   ctx.translate(FACE_SIZE / 2, FACE_SIZE / 2);
   ctx.rotate(-angle);

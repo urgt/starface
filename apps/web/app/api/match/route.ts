@@ -125,7 +125,6 @@ export async function POST(req: Request) {
   const queryResult = await env.FACES.query(payload.embedding, {
     topK: k,
     returnMetadata: "all",
-    filter: { active: { $eq: true } },
   });
 
   if (!queryResult.matches.length) {
