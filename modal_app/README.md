@@ -1,6 +1,6 @@
 # starface-ml (Modal app)
 
-GPU inference for the kiosk. One container, one endpoint, L4 GPU, warm 24/7.
+GPU inference for the kiosk. One container, one endpoint, L4 GPU, scale-to-zero.
 
 ## Pipeline
 
@@ -71,9 +71,13 @@ PY
 
 ## Warm vs cold
 
-- `min_containers=1` keeps one L4 warm → ~$14/mo 24/7 or ~$4/mo under a weekday
-  schedule. Set it via Modal's dashboard or `schedules=[]` if the kiosk has
-  known operating hours.
+- Scale-to-zero by default (`min_containers` unset). `scaledown_window=180`
+  drops the container after 3 min idle. To switch back to always-warm for a
+  production launch: add `min_containers=1` to the `@app.cls(...)` decorator
+  and redeploy (~$14/mo 24/7 for L4, ~$4/mo under a weekday schedule).
 - Warm p95: YuNet ~30 ms + DINOv2 ViT-L ~120 ms → ~200 ms inference + 150–250 ms
   RTT from Cloudflare Pages ≈ 500 ms end-to-end.
-- Cold start: 2–4 s (image pull + HF cache hydrate from Volume).
+- Cold start: 15–30 s on first request after idle (container boot + CUDA init +
+  `pipeline.warm()` loads DINOv2 + FairFace from the HF volume). Kiosk users
+  will feel this on the first shot of the day; subsequent shots within the
+  `scaledown_window` are warm.

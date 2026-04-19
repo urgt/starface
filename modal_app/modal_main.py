@@ -60,8 +60,7 @@ SECRET = modal.Secret.from_name("starface-modal")
 
 @app.cls(
     gpu="L4",
-    min_containers=1,
-    scaledown_window=300,
+    scaledown_window=180,
     timeout=120,
     volumes={"/hf-cache": HF_CACHE},
     secrets=[SECRET],

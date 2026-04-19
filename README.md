@@ -80,7 +80,7 @@ pnpm descriptions --limit 20
 
 ## Приватность
 
-Жест ✌️ = implicit consent. Фото пользователя хранится 24 ч в R2 `users/`, затем удаляется Cron Trigger'ом (`/api/cron/cleanup` каждые 6 часов, он же пингует `/healthz` на Modal). Embedding пользователя в БД **не сохраняется** — только top-N целебрити + ссылка на фото.
+Жест ✌️ = implicit consent. Фото пользователя хранится 24 ч в R2 `users/`, затем удаляется Cron Trigger'ом (`/api/cron/cleanup` каждые 6 часов). Embedding пользователя в БД **не сохраняется** — только top-N целебрити + ссылка на фото.
 
 ## Верификация
 

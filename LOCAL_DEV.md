@@ -86,10 +86,20 @@ pnpm --filter @starface/web exec wrangler login
 
 ### Терминал 1 — локальный ML-сервер
 
+Из корня репо:
+
 ```bash
 cd /home/<user>/Desktop/starface
 MODAL_SHARED_SECRET=local-dev PYTHONPATH=. \
   uv run --project scripts/seed/py python modal_app/local_server.py
+```
+
+Либо одной строкой из любой cwd (абсолютные пути):
+
+```bash
+MODAL_SHARED_SECRET=local-dev PYTHONPATH=/home/<user>/Desktop/starface \
+  uv run --project /home/<user>/Desktop/starface/scripts/seed/py \
+  python /home/<user>/Desktop/starface/modal_app/local_server.py
 ```
 
 Ждёшь строчку:
