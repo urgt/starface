@@ -99,6 +99,16 @@ function rerank(
 }
 
 export async function POST(req: Request) {
+  try {
+    return await handleMatch(req);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("match_internal_error", detail, err);
+    return NextResponse.json({ error: "internal", detail }, { status: 500 });
+  }
+}
+
+async function handleMatch(req: Request) {
   let payload: z.infer<typeof bodySchema>;
   try {
     payload = bodySchema.parse(await req.json());
